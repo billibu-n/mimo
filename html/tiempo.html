@@ -1,0 +1,36 @@
+<!-- ==========================================================================
+     tiempo.html - la pestana Tiempo, entera.
+
+     Es una PIEZA: no se abre sola en el navegador. La mete en su sitio el programa
+     construir/index.py, que arma el index.html juntando esta pieza con las demas.
+     Para editar esta pestana, edita este archivo y vuelve a armar.
+     ========================================================================== -->
+
+<!-- ============ TIEMPO ============ -->
+  <section class="panel" id="p-tiempo">
+    <div class="tiempo">
+      <div class="crono">
+        <div class="crono-cab">
+          <button class="mini modo on" data-modo="cronometro">Cronómetro</button>
+          <button class="mini modo" data-modo="temporizador">Temporizador</button>
+        </div>
+        <div class="reloj" id="reloj">00:00:00</div>
+        <div id="crono-extra"></div>
+        <div class="campo"><span>Duración del temporizador (minutos)</span>
+          <input type="number" id="crono-objetivo" min="1" max="600" step="1" value="25" style="width:100%"></div>
+        <div class="campo"><span>Ramo al que se carga</span><select id="crono-ramo"></select></div>
+        <div class="campo"><span>Semana en la que se registra</span><select id="crono-semana"></select></div>
+        <div class="fila" style="gap:8px;margin-top:12px">
+          <button class="btn primario" id="crono-play">Iniciar</button>
+          <button class="btn" id="crono-cero">Poner en cero</button>
+          <button class="btn" id="crono-registrar">Registrar en la semana</button>
+        </div>
+        <p class="ayuda">El cronómetro sigue corriendo aunque cambies de pestaña. Si cierras el archivo,
+           al volver a abrirlo el tiempo sigue donde iba.</p>
+      </div>
+      <div class="sesiones">
+        <h3>Sesiones de hoy</h3>
+        <div id="lista-sesiones"></div>
+      </div>
+    </div>
+  </section>

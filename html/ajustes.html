@@ -1,0 +1,108 @@
+<!-- ==========================================================================
+     ajustes.html - la pestana Ajustes, entera.
+
+     Es una PIEZA: no se abre sola en el navegador. La mete en su sitio el programa
+     construir/index.py, que arma el index.html juntando esta pieza con las demas.
+     Para editar esta pestana, edita este archivo y vuelve a armar.
+     ========================================================================== -->
+
+<!-- ============ AJUSTES ============ -->
+  <section class="panel" id="p-ajustes">
+    <details class="barra-extraible" open>
+      <summary><span class="izq">Apariencia
+        <span class="cuenta">cómo se ve el panel · se acepta al final de este bloque</span></span>
+        <span class="flecha">&#9654;</span></summary>
+      <div class="cuerpo">
+        <div class="tarjeta">
+          <h2>Ajustes avanzados</h2>
+          <div class="sub">Cambia cómo <b>se ve</b> el panel: el tema, los colores de los estados de la malla,
+            el relleno, la densidad y los detalles de las tarjetas. Nada de esto toca tus datos: son los
+            mismos ramos, las mismas notas y las mismas horas, con otra ropa.</div>
+          <div id="avanzado"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Cómo se abrevian los títulos</h2>
+          <div class="sub">En la tabla de horas los nombres de los ramos comparten columna con su casilla
+            de tiempo, y uno largo no cabe. Elige qué hacer cuando no cabe: el nombre completo está
+            siempre en el globito al pasar el mouse por encima.</div>
+          <div id="titulos-modo"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="barra-extraible">
+      <summary><span class="izq">Estudio
+        <span class="cuenta">cuánto quieres estudiar y para qué · se guarda al escribir</span></span>
+        <span class="flecha">&#9654;</span></summary>
+      <div class="cuerpo">
+        <div class="tarjeta">
+          <h2>Vista "Por hacer"</h2>
+          <div class="sub">Qué se ve en la lista de tareas del semestre.</div>
+          <div class="campo"><span>Mostrar tareas ya realizadas en la vista "Por hacer"</span>
+            <input type="checkbox" id="aj-ver-hechas" style="justify-self:end"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Cómo se muestran las horas</h2>
+          <div class="sub">Elige en qué forma quieres ver las horas en los gráficos, la tabla y el
+            calendario. Puedes encender más de una: se muestran juntas, separadas por un punto.</div>
+          <div id="formatos-hora"></div>
+          <div class="campo"><span>Avisar con un sonido cuando el temporizador llegue a cero</span>
+            <input type="checkbox" id="aj-sonido" style="justify-self:end"></div>
+        </div>
+        <div class="tarjeta">
+          <h2>Metas por ramo</h2>
+          <div class="sub">Horas que quieres dedicarle a cada ramo en una semana, la nota a la que apuntas y
+            si lo tienes en curso o ya aprobado.</div>
+          <table class="comp" id="tabla-metas-ramo"></table>
+        </div>
+      </div>
+    </details>
+
+    <details class="barra-extraible">
+      <summary><span class="izq">Semestres
+        <span class="cuenta">cada semestre guarda sus ramos, notas y horas por separado</span></span>
+        <span class="flecha">&#9654;</span></summary>
+      <div class="cuerpo">
+        <div class="tarjeta">
+          <p class="ayuda">Cada semestre guarda sus propios ramos, calendario, notas y horas. <b>Para agregar o quitar ramos</b>, anda a la pestaña <b>Malla</b>: haz clic en el ramo y elígelo desde ahí. Al agregarlo queda con sus categorías y componentes en blanco, listo para que le pongas las notas.</p>
+          <div id="lista-semestres"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="barra-extraible">
+      <summary><span class="izq">Mis datos
+        <span class="cuenta">llevarte todo a otro navegador o a otro computador</span></span>
+        <span class="flecha">&#9654;</span></summary>
+      <div class="cuerpo">
+        <div class="tarjeta">
+          <p class="ayuda">Todo lo que edites se guarda en este navegador, no en un servidor. Usa estos
+            botones para respaldar o para llevar tus datos a otro computador.</p>
+          <div class="fila" style="gap:8px">
+            <button class="btn" id="exportar">Descargar mis datos (.json)</button>
+            <button class="btn" id="importar">Cargar un archivo</button>
+            <button class="btn peligro" id="restablecer">Restablecer todo</button>
+          </div>
+          <input type="file" id="archivo" accept=".json" style="display:none">
+          <p class="ayuda" id="estado-guardado"></p>
+        </div>
+      </div>
+    </details>
+    <details class="barra-extraible">
+      <summary><span class="izq">Actualización
+        <span class="cuenta">comprobar si hay una versión más nueva</span></span>
+        <span class="flecha">&#9654;</span></summary>
+      <div class="cuerpo">
+        <div class="tarjeta">
+          <p class="ayuda">La aplicación se actualiza desde GitHub. Si hay una versión más nueva,
+            te avisa y te lleva a la página donde bajas el archivo.</p>
+          <div class="fila" style="gap:8px;align-items:center">
+            <button class="btn" id="btn-actualizar">Buscar actualización</button>
+            <a id="enlace-actualizar" href="#" target="_blank" rel="noopener"
+               style="display:none" class="btn">Descargar versión nueva</a>
+          </div>
+          <p class="ayuda" id="caja-actualizar"></p>
+        </div>
+      </div>
+    </details>
+  </section>

@@ -1,0 +1,37 @@
+<!-- ==========================================================================
+     semestre.html - la pestana Semestre, entera.
+
+     Es una PIEZA: no se abre sola en el navegador. La mete en su sitio el programa
+     construir/index.py, que arma el index.html juntando esta pieza con las demas.
+     Para editar esta pestana, edita este archivo y vuelve a armar.
+     ========================================================================== -->
+
+<!-- ============ SEMESTRE ============ -->
+  <section class="panel on" id="p-semestre">
+    <div class="estado" id="estado"></div>
+    <div class="layout">
+      <aside class="rail">
+        <h3>Ramos</h3>
+        <div id="f-ramos"></div>
+        <hr>
+        <h3>Ver</h3>
+        <div class="fila" style="gap:6px;flex-wrap:wrap">
+          <button class="mini on" id="v-todo">Todo</button>
+          <button class="mini" id="v-prox">Lo que viene</button>
+          <button class="mini" id="v-pend">Por hacer</button>
+        </div>
+        <hr>
+        <button class="btn" id="nueva-tarea">+ Nuevo evento</button>
+        <p class="ayuda">Haz clic en cualquier evento para ponerle prioridad, marcarlo como hecho, o
+           escribirle una descripción y su temario.</p>
+      </aside>
+      <div style="overflow-x:auto">
+        <table class="sem">
+          <thead><tr><th class="bl">Semana</th>
+            <th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th>
+            <th>Sábado</th><th>Domingo</th><th class="est">Estudio</th></tr></thead>
+          <tbody id="cuerpo"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
