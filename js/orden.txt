@@ -33,4 +33,5 @@ malla/05-ficha.js
 malla/06-simulador.js
 comun/07-select.js
 ajustes/06-actualizar.js
+ajustes/07-ical.js
 comun/06-arranque.js

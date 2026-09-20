@@ -219,8 +219,10 @@ function estadoInicial(){
   const e = {v:3, activo:D.semestres.length ? D.semestres[0].id : null,
              ajustes:{verHechasPorHacer:false, titulos:{modo:'envuelto', largo:12}}, extras:[],
              sem:{}, agregados:{}, fuera:{}, aprobados:{},
-             tiempo:{modo:'cronometro', corriendo:false, inicio:null, acumulado:0,
-                             objetivo:25, ramo:null, semana:null}};
+             tiempo:{modo:'cronometro',
+                             crono:{acumulado:0, corriendo:false, inicio:null},
+                             temp:{objetivo:25, restante:0, corriendo:false, inicio:null},
+                             ramo:null, semana:null, dia:null}};
   D.semestres.forEach(s => { e.sem[s.id] = estadoSemestre(s); });
   return e;
 }
@@ -249,8 +251,26 @@ function cargar(){
       delete e.sem[sem.id].metas.techo;   // el techo se elimino: se descarta lo guardado
     });
     if (!e.sem[e.activo] && D.semestres.length) e.activo = D.semestres[0].id;
+    migrarTiempo(e);
     return e;
   } catch (err) { return base; }
+}
+// Cronometro y temporizador pasaron de compartir un estado (acumulado/corriendo/inicio/objetivo)
+// a tener dos estados propios (crono y temp). Si se abre un respaldo guardado antes, se mueve lo
+// viejo a su lugar para que nada se pierda ni se mezcle.
+function migrarTiempo(e){
+  const t = e.tiempo || {};
+  e.tiempo = t;
+  t.crono = t.crono || {acumulado:0, corriendo:false, inicio:null};
+  t.temp = t.temp || {objetivo:25, restante:0, corriendo:false, inicio:null};
+  // El estado viejo vivia en la raiz de t. Si todavia esta, se rescata al cronometro y se limpia.
+  if (t.acumulado !== undefined || t.corriendo !== undefined){
+    t.crono.acumulado = Number(t.acumulado) || 0;
+    t.crono.corriendo = !!t.corriendo;
+    t.crono.inicio = t.inicio || null;
+    t.temp.objetivo = Number(t.objetivo) || 25;
+    delete t.acumulado; delete t.corriendo; delete t.inicio; delete t.objetivo;
+  }
 }
 function guardar(aviso){
   E.guardadoEn = Date.now();          // marca para decidir quién tiene lo más nuevo al conectar

@@ -1,12 +1,15 @@
 /* ---------------------------------------------------------------- utilidades */
 function sumaDias(iso, n){
-  const d = new Date(iso + 'T12:00:00');
+  const d = aFecha(iso);
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return aISO(d);
 }
 function aFecha(iso){ return new Date(iso + 'T12:00:00'); }
 function dos(n){ return String(n).padStart(2, '0'); }
-function hoy(){ return new Date().toISOString().slice(0, 10); }
+// Fecha de HOY en hora LOCAL (YYYY-MM-DD). Antes usaba toISOString(), que es UTC: en Chile eso
+// descuadraba la fecha y una sesion de "ayer" aparecia como de hoy (o al reves) segun la hora.
+function aISO(d){ return d.getFullYear() + '-' + dos(d.getMonth() + 1) + '-' + dos(d.getDate()); }
+function hoy(){ return aISO(new Date()); }
 function rangoSemana(lunes){
   const l = aFecha(lunes), d = aFecha(sumaDias(lunes, 6));
   const a = dos(l.getDate()), b = dos(d.getDate());

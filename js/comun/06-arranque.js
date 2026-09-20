@@ -87,7 +87,12 @@ document.getElementById('crono-play').onclick = cronoPlay;
 document.getElementById('crono-cero').onclick = cronoCero;
 document.getElementById('crono-registrar').onclick = cronoRegistrar;
 document.getElementById('crono-ramo').onchange = ev => { E.tiempo.ramo = ev.target.value; guardar(); };
-document.getElementById('crono-semana').onchange = ev => { E.tiempo.semana = ev.target.value; guardar(); };
+document.getElementById('crono-semana').onchange = ev => {
+  E.tiempo.semana = ev.target.value;
+  E.tiempo.dia = null;   // se recalcula: si la semana nueva contiene hoy, queda hoy; si no, el lunes
+  guardar(); renderTiempo();
+};
+document.getElementById('crono-dia').onchange = ev => { E.tiempo.dia = ev.target.value; guardar(); };
 document.getElementById('crono-objetivo').onchange = ev => {
   E.tiempo.objetivo = Math.max(1, Math.min(600, Number(ev.target.value) || 25));
   guardar(); renderTiempo();
@@ -122,6 +127,25 @@ function descargarRespaldo(nombre){
   a.click();
 }
 
+// Al importar, los tipos de evento VIVEN en E.tipos (los crea el usuario en Ajustes; la version
+// vacia no trae ninguno de fabrica). Un respaldo hecho en la version CON ejemplo no trae E.tipos
+// (ahi los tipos venian de la constante TIPOS), pero sus eventos SI usan esos tipos. Sin esto,
+// tiposDe() quedaria vacio y el filtro del calendario descartaria TODOS los eventos: el usuario
+// cargaba su respaldo y el calendario salia sin una sola actividad. Se rescatan los tipos que de
+// verdad aparecen en los eventos, con la etiqueta canonica de TIPOS; los que no estan en TIPOS se
+// dejan con la etiqueta en mayusculas que usaban.
+function restaurarTipos(datos){
+  const usados = {};
+  (datos.semestres || []).forEach(sem => {
+    (sem.eventos || []).forEach(e => { if (e.tipo) usados[e.tipo] = 1; });
+  });
+  E.tipos = E.tipos || {};
+  Object.keys(usados).forEach(t => {
+    if (E.tipos[t]) return;                       // ya lo tiene el usuario
+    E.tipos[t] = TIPOS[t] || t.toUpperCase();     // etiqueta canonica, o mayuscula si no la hay
+  });
+}
+
 document.getElementById('restablecer').onclick = () => {
   if (!confirm('Se borrara TODO lo que hiciste: semestres, eventos, notas, colores, tiempos y ' +
                'ajustes. Antes se descargara un respaldo por si fue un error.\n\n' +
@@ -141,6 +165,13 @@ document.getElementById('restablecer').onclick = () => {
 document.getElementById('exportar').onclick = () => { descargarRespaldo(); };
 document.getElementById('importar').onclick = () => document.getElementById('archivo').click();
 document.getElementById('btn-actualizar').onclick = buscarActualizacion;
+document.getElementById('exportar-ical').onclick = exportarIcal;
+document.getElementById('importar-ical').onclick = () => document.getElementById('archivo-ical').click();
+document.getElementById('archivo-ical').onchange = ev => {
+  const f = ev.target.files[0];
+  if (f) importarIcal(f);
+  ev.target.value = '';
+};
 document.getElementById('archivo').onchange = ev => {
   const f = ev.target.files[0];
   if (!f) return;
@@ -156,6 +187,7 @@ document.getElementById('archivo').onchange = ev => {
       if (datos.formato === 2 && datos.estado && typeof datos.estado === 'object') {
         // 1. el estado del usuario
         E = Object.assign(estadoInicial(), datos.estado);
+        migrarTiempo(E);   // pone el tiempo viejo (raiz) en crono/temp, si el respaldo es anterior
         // 2. la malla (catalogo y niveles) que el respaldo traiga: entra por E.catalogo, porque
         //    D es la capa fija que trae el HTML y no se puede reescribir. CAT() ya combina ambas.
         const catTraido = datos.catalogo || {};
@@ -170,6 +202,7 @@ document.getElementById('archivo').onchange = ev => {
           }
         });
         invalidarCatalogo();
+        restaurarTipos(datos);
         guardar('Datos cargados'); resetFiltros(); arranque();
         return;
       }
@@ -178,6 +211,7 @@ document.getElementById('archivo').onchange = ev => {
       // traia la malla ni los semestres del ejemplo, asi que se avisa para que no parezca perdido.
       if ('sem' in datos || 'v' in datos || 'activo' in datos) {
         E = Object.assign(estadoInicial(), datos);
+        migrarTiempo(E);   // lo mismo: respaldo viejo con tiempo en la raiz
         guardar('Datos cargados'); resetFiltros(); arranque();
         mostrarAviso('Se cargaron tus datos. Si la malla no aparece, importa tu malla de nuevo ' +
                      '(Ajustes > Malla > Importar malla desde un archivo).');

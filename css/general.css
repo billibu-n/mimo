@@ -233,6 +233,9 @@ textarea{width:100%;min-height:74px;padding:8px 10px;border:1px solid var(--line
 .sel{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:var(--r-sm);
      padding:5px 9px;font:inherit;font-size:.85rem}
 .sel option{color:var(--fg)}
+/* El selector de semestre activo de la cabecera: un ancho minimo fijo para que no se encoja
+   al ancho del nombre mas corto (quedaba diminuto junto a "+Semestre"). */
+#sem-activo, #sem-activo.sel, .sel-cara.sel-cabecera{min-width:13rem}
 .btn.chico{padding:4px 9px;font-size:.78rem;background:var(--sup2);color:var(--fg);
            border-color:rgba(255,255,255,.25)}
 .btn.chico:hover{filter:brightness(1.12)}
@@ -349,6 +352,12 @@ table.cat input[type=color]:focus{outline:none;border-color:var(--ac);box-shadow
         font-size:.83rem}
 .sesion:last-child{border-bottom:0}
 .sesion .h{font-variant-numeric:tabular-nums;font-weight:700}
+/* Encabezado de cada dia en "Sesiones por dia" */
+.dia-titulo{margin:10px 0 2px;padding-top:8px;font-size:.78rem;font-weight:700;color:var(--ac-fuerte);
+  text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--line2)}
+.dia-titulo:first-of-type{border-top:0;margin-top:0}
+.sesion.total{border-bottom:0;color:var(--muted);font-size:.8rem}
+.sesion.total .h{color:var(--fg)}
 .destino{background:var(--info-bg);border:1px solid #93c5fd;border-radius:var(--r-md);padding:8px 11px;font-size:.8rem;
          margin-bottom:10px}
 .mini.peligro{color:var(--bad);border-color:#fecaca}
@@ -637,7 +646,20 @@ table.minutos td.celda-meta input.meta-casilla.propia{color:var(--fg);font-weigh
 
 /* ---- Modal de edicion de ramo mas ancho y comodo ----
    El editor de ramos tiene muchos campos; darle mas aire evita que se lea apretado. */
-.modal-caja.m-campo{max-width:720px}
+.modal-caja.m-campo{max-width:960px}
+
+/* Los campos del editor se reparten en dos columnas en pantallas anchas para no formar una
+   columna delgada y vertical. Solo si el modal es el editor de ramos (lleva el boton r-guardar),
+   no el simulador. Los campos anchos cruzan las dos columnas. */
+.modal-caja.m-campo:has(#r-guardar){display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px 18px;align-items:start}
+.modal-caja.m-campo:has(#r-guardar)>h2,
+.modal-caja.m-campo:has(#r-guardar)>.cerrar,
+.modal-caja.m-campo:has(#r-guardar)>.ayuda,
+.modal-caja.m-campo:has(#r-guardar)>#r-error,
+.modal-caja.m-campo:has(#r-guardar)>.campo:has(.pista),
+.modal-caja.m-campo:has(#r-guardar)>.campo:has(select[multiple]),
+.modal-caja.m-campo:has(#r-guardar)>.fila{grid-column:1/-1}
 
 /* ---- Barra extraible: el despliegue unico de toda la aplicacion ----
    Hasta ahora cada lista y cada bloque del modal se veian planos, sin un lenguaje comun para
