@@ -28,6 +28,9 @@ function arranque(){
   if (D.limpio) { const m = document.getElementById('aviso-muestra'); if (m) m.remove(); }
   memoEstados = null;    // repintado completo: los estados de la malla se recalculan desde cero
   aplicarAvanzado();
+  // Repara el estado ya guardado: si se importo un respaldo con codigo viejo, E.tipos quedo vacio
+  // y el calendario no pinta eventos. Al arrancar se rescatan de nuevo y se persisten.
+  if (restaurarTipos()) guardar();
   if (!ramosFiltro.size) resetFiltros();
   renderSemActivo();
   pintarFiltros();
@@ -135,15 +138,22 @@ function descargarRespaldo(nombre){
 // verdad aparecen en los eventos, con la etiqueta canonica de TIPOS; los que no estan en TIPOS se
 // dejan con la etiqueta en mayusculas que usaban.
 function restaurarTipos(datos){
+  // Junta los tipos de evento de TODOS los semestres conocidos: los del respaldo recien cargado
+  // (datos.semestres) y los que ya estan en el estado E (E.extras + E.sem). Asi sirve tanto al
+  // importar como al arrancar: si el estado en localStorage quedo sin E.tipos (por un import hecho
+  // con codigo viejo), se repara solo al recargar, y el calendario deja de salir vacio.
   const usados = {};
-  (datos.semestres || []).forEach(sem => {
-    (sem.eventos || []).forEach(e => { if (e.tipo) usados[e.tipo] = 1; });
-  });
+  const cadaEvento = e => { if (e && e.tipo) usados[e.tipo] = 1; };
+  (datos && datos.semestres || []).forEach(sem => (sem.eventos || []).forEach(cadaEvento));
+  (E.extras || []).forEach(sem => (sem.eventos || []).forEach(cadaEvento));
+  Object.values(E.sem || {}).forEach(s => (s.eventos || []).forEach(cadaEvento));
+  const era = Object.keys(E.tipos || {}).length;
   E.tipos = E.tipos || {};
   Object.keys(usados).forEach(t => {
     if (E.tipos[t]) return;                       // ya lo tiene el usuario
     E.tipos[t] = TIPOS[t] || t.toUpperCase();     // etiqueta canonica, o mayuscula si no la hay
   });
+  return Object.keys(E.tipos).length !== era;     // true si se rescato algun tipo nuevo
 }
 
 document.getElementById('restablecer').onclick = () => {
