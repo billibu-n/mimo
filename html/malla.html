@@ -7,10 +7,9 @@
      ========================================================================== -->
 
 <!-- ============ MALLA ============ -->
-  <section class="panel" id="p-malla">
+  <section class="seccion" data-seccion="malla" id="p-malla">
     <div class="estado" id="malla-kpis"></div>
     <div class="malla-lienzo">
-    <aside class="ficha-ramo" id="malla-ficha"></aside>
     <div class="malla-caja">
     <div class="tarjeta">
       <h2>Malla</h2>
@@ -36,21 +35,15 @@
 
     <details class="barra-extraible">
       <summary><span class="izq">Configuración de la malla
-        <span class="cuenta">campos de la ficha, colores de los ramos y respaldo</span></span>
+        <span class="cuenta">secciones y respaldo</span></span>
         <span class="flecha">&#9654;</span></summary>
       <div class="cuerpo">
         <div class="tarjeta">
-          <h2>Campos de la ficha del ramo</h2>
-          <div class="sub">La ficha es lo que anotas de cada ramo (de qué se trata, cuánto exige, cómo se
-            evalúa). Los campos los defines tú: renómbralos, agrega los que uses o quita los que no. Cada
-            campo tiene una clave fija, así que <b>renombrar no pierde lo escrito</b>.</div>
-          <div id="aj-malla"></div>
-        </div>
-        <div class="tarjeta">
-          <h2>Colores de los ramos</h2>
-          <div class="sub">Mueve el deslizador para recorrer todo el espectro, o usa el selector exacto.
-            El color se aplica al instante en el calendario, el gráfico y las notas.</div>
-          <div id="colores"></div>
+          <h2>Secciones de la carrera</h2>
+          <div class="sub">Agrupa los semestres en categorías (Plan común, Licenciatura, Especialidad...).
+            Cada sección tiene un nombre, una sigla corta y un color, y se asigna a un rango de semestres
+            o ramo a ramo en su editor. Viaja con la malla al exportar o importar.</div>
+          <div id="secciones-malla"></div>
         </div>
         <div class="tarjeta">
           <h2>Respaldo de la malla</h2>

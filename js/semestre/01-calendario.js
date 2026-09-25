@@ -53,7 +53,7 @@ function miniBarra(lunes){
 }
 function renderSemestre(){
   const h = hoy(), s = est(), sem = semActivo();
-  const cuerpo = document.getElementById('cuerpo');
+  const cuerpo = document.getElementById('cl-cuerpo');
   const porFecha = {};
   todosEventos().forEach(e => { (porFecha[e.fecha] = porFecha[e.fecha] || []).push(e); });
   const ocultarHechas = true;   // dentro de cada celda solo se ocultan en la vista "por hacer"
@@ -92,11 +92,14 @@ function renderSemestre(){
 
   const lunes = semanaDe(h), hAct = horasSemana(lunes);
   const meta = objetivoSemanal() || s.metas.semanal;
-  document.getElementById('estado').innerHTML =
+  document.getElementById('cl-estado').innerHTML =
     kpi(fmtHM(hAct * 60) || '0h', 'esta semana · objetivo ' + fmtHM(meta * 60)) +
     kpi(prox ? aFecha(prox.fecha).getDate() + ' ' + MESES[aFecha(prox.fecha).getMonth()] + ' · ' + prox.texto.slice(0,18) : '—',
         prox ? 'próximo control' : 'sin controles pendientes') +
     kpi(pendientes + (altas ? ' (' + altas + ')' : ''), 'tareas por hacer' + (altas ? ' · ' + altas + ' de prioridad alta' : '')) +
     kpi(fmtHM(totalHoras() * 60) || '0h', 'estudio registrado en el semestre');
+  // El calendario comercial (mes/año) se refresca con los mismos eventos; la tabla semanal ya se
+  // pinto aqui arriba. El guard evita la recursion con renderCalendario() cuando la vista es 'sem'.
+  try { actualizarCalendario(); } catch (e) { /* sin calendario montado aun: solo la tabla */ }
 }
 function kpi(v, t){ return '<div class="kpi"><b>' + v + '</b><span>' + t + '</span></div>'; }

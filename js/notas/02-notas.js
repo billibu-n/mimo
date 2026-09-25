@@ -8,7 +8,7 @@ function renderLista(){
     const primero = conExim || ramos[0];
     selNotas = primero ? primero.codigo : null;    // sin ramos no hay nada que abrir
   }
-  document.getElementById('lista-ramos').innerHTML = ramos.map(r => {
+  document.getElementById('ev-lista').innerHTML = ramos.map(r => {
     const ex = examenSim[r.codigo] !== undefined ? examenSim[r.codigo] : null;
     const nf = notaFinal(r.codigo, ex);
     const obj = (s.metas_ramo[r.codigo] || {}).nota;
@@ -20,7 +20,7 @@ function renderLista(){
       (obj ? ' · apuntas a ' + ver1(obj) : '') + '</span></span>' +
       '<span class="nf"' + cls + '>' + (nf === null ? '—' : ver1(nf)) + '</span></div>';
   }).join('');
-  document.querySelectorAll('#lista-ramos .item').forEach(el =>
+  document.querySelectorAll('#ev-lista .item').forEach(el =>
     el.onclick = () => { selNotas = el.dataset.r; renderLista(); renderDetalle(); });
 }
 function htmlExim(cod, ex){
@@ -64,7 +64,7 @@ function actualizarResumen(cod){
 function renderDetalle(){
   const cod = selNotas, r = cursoDe(cod), s = est();
   if (!r) {   // sin ramos no hay nada que detallar: se explica en vez de reventar
-    document.getElementById('detalle').innerHTML =
+    document.getElementById('ev-detalle').innerHTML =
       '<p class="ayuda" style="padding:20px">Aquí aparecen las notas del ramo que elijas a la ' +
       'izquierda. Todavía no tienes ninguno: créalos en la pestaña <b>Malla</b>.</p>';
     return;
@@ -134,7 +134,7 @@ function renderDetalle(){
       '<button class="quitar" data-cond-quitar="' + i + '">×</button></div>';
   }).join('') || '<div class="vacio">Sin condiciones: mientras no haya ninguna, el ramo no se exime.</div>';
 
-  document.getElementById('detalle').innerHTML = `
+  document.getElementById('ev-detalle').innerHTML = `
     <div class="tarjeta">
       <h2><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${colorDe(cod)}"></i>
         ${esc(r.alias)} <span class="mono" style="font-weight:400;color:var(--muted)">${r.codigo}</span>
@@ -232,6 +232,39 @@ function renderDetalle(){
           </div>
         </details>
       </div>
+
+      <div class="bloque">
+        <details class="barra-extraible">
+          <summary><span class="izq">Asistencia <span class="cuenta">torta, clases y horario</span></span><span class="flecha">&#9654;</span></summary>
+          <div class="cuerpo">
+            ${tortaAsistencia(cod, asistenciaDe(cod) && asistenciaDe(cod).pct)}
+            <div class="campo"><span>Mínimo de asistencia (%)</span>
+              <input type="number" id="asis-minimo" min="0" max="100" step="5" value="${minimoDe(cod)}"></div>
+            <div class="campo"><span>Peso de una clase parcial (0-1)</span>
+              <input type="number" id="asis-parcial" min="0" max="1" step="0.05" value="${pesoParcialDe(cod)}"></div>
+            <div class="horario-grid">${celdasHorario(cod)}</div>
+            <div class="fila" style="margin-top:8px;gap:8px">
+              <button class="btn" id="hora-agregar">+ Bloque de clase</button>
+            </div>
+            ${filasHorario(cod)}
+            <p class="ayuda">Marca cada clase (presente / parcial / ausente) en el calendario para que la torta
+              avance. El horario de acá es el que se ve distribuido de lunes a domingo; cada bloque nace de 1:30 h
+              y puedes estirarlo para darle más horas.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="bloque">
+        <details class="barra-extraible">
+          <summary><span class="izq">Color del ramo</span><span class="flecha">&#9654;</span></summary>
+          <div class="cuerpo">
+            <div class="campo"><span>Color con el que se marca este ramo</span>
+              <input type="color" id="ramo-color" value="${colorDe(cod)}"></div>
+            <p class="ayuda">El color individual del ramo, tal como aparece al tomarlo (en Evaluaciones,
+              Calendario y Malla). Cada ramo puede tener el suyo.</p>
+          </div>
+        </details>
+      </div>
     </div>
     <div class="sim">
       <details class="barra-extraible">
@@ -313,6 +346,71 @@ function enlazarDetalle(cod, r){
     eximDe(cod).condiciones[+el.dataset.condValor].valor = normalizarNota(el.value) || 4;
   });
   on('[data-cond-quitar]','onclick', el => { eximDe(cod).condiciones.splice(+el.dataset.condQuitar, 1); });
+  // ---- Asistencia: minimo, peso de parcial, color y horario ----
+  const asisMin = document.getElementById('asis-minimo');
+  if (asisMin) asisMin.onchange = () => {
+    E.asistencia = E.asistencia || {pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}};
+    E.asistencia.minimo = E.asistencia.minimo || {};
+    E.asistencia.minimo[cod] = Math.max(0, Math.min(100, Number(asisMin.value) || 0));
+    guardar(); renderTodo();
+  };
+  const asisPar = document.getElementById('asis-parcial');
+  if (asisPar) asisPar.onchange = () => {
+    E.asistencia = E.asistencia || {pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}};
+    E.asistencia.pesoParcial = E.asistencia.pesoParcial || {};
+    E.asistencia.pesoParcial[cod] = Math.max(0, Math.min(1, Number(asisPar.value) || 0));
+    guardar(); renderTodo();
+  };
+  const ramoColor = document.getElementById('ramo-color');
+  if (ramoColor) ramoColor.onchange = () => {
+    est().colores = est().colores || {};
+    est().colores[cod] = ramoColor.value;
+    guardar(); renderTodo();
+  };
+  const horaAg = document.getElementById('hora-agregar');
+  if (horaAg) horaAg.onclick = () => {
+    agregarBloqueHorario(cod, {dia:0, franja:'10:00', duracion:90});
+    guardar(); renderTodo();
+  };
+  on('[data-hora-quitar]','onclick', el => {
+    borrarBloqueHorario(cod, +el.dataset.horaQuitar);
+    guardar(); renderTodo();
+  });
+  // duracion editable (estirar el bloque para darle mas horas), en minutos
+  on('[data-hora-dur]','onchange', el => {
+    const lista = horarioDe(cod);
+    const i = +el.dataset.horaDur;
+    if (lista[i]) lista[i].duracion = Math.max(30, Math.min(600, Number(el.value) || 90));
+    guardar(); renderTodo();
+  });
+  // drag & drop: arrastrar un bloque a otro dia
+  let arrastrando = null;
+  document.querySelectorAll('.hora-celda-bloque').forEach(bl => {
+    bl.addEventListener('dragstart', ev => {
+      arrastrando = Number(bl.dataset.horai);
+      bl.classList.add('arrastrando');
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', String(arrastrando));
+    });
+    bl.addEventListener('dragend', () => {
+      bl.classList.remove('arrastrando');
+      document.querySelectorAll('.hora-dia-col.sobre').forEach(c => c.classList.remove('sobre'));
+    });
+  });
+  document.querySelectorAll('.hora-dia-col').forEach(col => {
+    col.addEventListener('dragover', ev => { ev.preventDefault(); col.classList.add('sobre'); });
+    col.addEventListener('dragleave', () => col.classList.remove('sobre'));
+    col.addEventListener('drop', ev => {
+      ev.preventDefault();
+      col.classList.remove('sobre');
+      const i = Number(ev.dataTransfer.getData('text/plain'));
+      const dia = Number(col.dataset.dia);
+      if (i === arrastrando && !isNaN(i) && !isNaN(dia)) {
+        const lista = horarioDe(cod);
+        if (lista[i]) { lista[i].dia = dia; guardar(); renderTodo(); }
+      }
+    });
+  });
   const nm = document.getElementById('nota-min');
   if (nm) nm.onchange = () => {
     const v = normalizarNota(nm.value);
@@ -369,6 +467,13 @@ function enlazarDetalle(cod, r){
   });
 }
 function renderTodo(sinAjustes){
+  // Al repintar, las barras extraibles (barra-extraible) se reconstruyen y nacen plegadas. Para que
+  // un cambio dentro de una barra (ej. marcar la eximicion o el examen) NO cierre el panel que se
+  // esta editando, se recuerda cuales estaban abiertas por el resumen del <summary> y se reabren al
+  // final. Es el arreglo del bug "se cierra el panel al tocar algo" (2026-09-21).
+  const abiertas = [].slice.call(document.querySelectorAll('.barra-extraible.abierta'))
+    .map(b => (b.querySelector(':scope > summary') || {}).textContent || '')
+    .map(t => t.replace(/\s+/g, ' ').trim());
   memoEstados = null;                       // cualquier cambio puede mover el estado de la malla
   // los filtros del calendario salen de los ramos del semestre: si se agrega o se quita uno, la lista
   // del costado tiene que seguirlo, o quedaria desfasada de la malla
@@ -376,4 +481,52 @@ function renderTodo(sinAjustes){
   renderLista(); renderDetalle(); renderSemestre(); renderEstudio(); renderMalla();
   estilizarSelects(document);
   if (!sinAjustes) renderAjustes();
+  // reabre las que estaban abiertas, buscandolas por su titulo (los summaries no llevan id estable)
+  document.querySelectorAll('.barra-extraible').forEach(b => {
+    const t = ((b.querySelector(':scope > summary') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+    if (t && abiertas.indexOf(t) !== -1 && !b.classList.contains('abierta')) b.classList.add('abierta');
+  });
+}
+
+/* ---------------------------------------------------------------- asistencia y horario del ramo
+   Bloque de la pestana Ramos: torta de % de asistencia, las clases por franja, el horario semanal
+   L-D (arrastrable y estirable) y las bandas de % -> nota que comunican con Evaluaciones. */
+function tortaAsistencia(cod, pct){
+  if (pct === null) return '<span class="vacio">Sin clases marcadas todavía.</span>';
+  // torta con SVG: arco de pct sobre el total. Un circulo con stroke-dasharray.
+  const r = 34, circ = 2 * Math.PI * r, lleno = Math.round(circ * pct / 100);
+  const color = pct >= minimoDe(cod) ? 'var(--ok)' : 'var(--bad)';
+  return '<div class="torta"><svg viewBox="0 0 80 80" width="80" height="80">' +
+    '<circle cx="40" cy="40" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="8"></circle>' +
+    '<circle cx="40" cy="40" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" ' +
+    'stroke-dasharray="' + lleno + ' ' + (circ - lleno) + '" stroke-linecap="round" transform="rotate(-90 40 40)"></circle>' +
+    '<text x="40" y="45" text-anchor="middle" font-size="16" fill="var(--fg)" font-weight="700">' + pct + '%</text></svg>' +
+    '<div class="torta-txt"><b>' + pct + '% de asistencia</b><span>mínimo ' + minimoDe(cod) + '%</span></div></div>';
+}
+function filasHorario(cod){
+  const bloques = horarioDe(cod);
+  if (!bloques.length) return '<p class="ayuda">Arrastra un ramo hasta un día para armarlo, o usa "+ Bloque". Cada bloque nace de 1:30 h.</p>';
+  return bloques.map((b, i) =>
+    '<div class="hora-bloque" data-i="' + i + '">' +
+      '<span class="hora-dia">' + DIAS[b.dia] + '</span>' +
+      '<span class="hora-franja">' + esc(b.franja) + '</span>' +
+      '<input type="number" class="hora-dur-input" min="30" max="600" step="15" data-hora-dur="' + i + '" value="' + b.duracion + '" title="Duración (minutos)">' +
+      '<span class="hora-dur">' + Math.floor(b.duracion / 60) + ':' + String(b.duracion % 60).padStart(2, '0') + ' h</span>' +
+      '<button class="quitar" data-hora-quitar="' + i + '" title="Quitar">×</button>' +
+    '</div>').join('');
+}
+function celdasHorario(cod){
+  // 7 columnas (L-D). Cada bloque es arrastrable entre dias; cada columna acepta soltar. La
+  // franja se muestra y la duracion se estira con el input de abajo (filasHorario).
+  const bloques = horarioDe(cod);
+  return DIAS.map((d, di) => {
+    const enDia = bloques
+      .map((b, i) => ({b:b, i:i}))
+      .filter(x => Number(x.b.dia) === di);
+    return '<div class="hora-dia-col" data-dia="' + di + '" data-col="1">' +
+      '<div class="hora-dia-tit">' + esc(d.slice(0, 2)) + '</div>' +
+      enDia.map(x => '<div class="hora-celda-bloque" draggable="true" data-horai="' + x.i + '" ' +
+        'title="Arrastra a otro día">' + esc(x.b.franja) + '</div>').join('') +
+      '</div>';
+  }).join('');
 }

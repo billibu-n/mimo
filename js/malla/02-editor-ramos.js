@@ -1,50 +1,76 @@
 /* ------------------------------------------------------------- editor de ramos
    Es la pieza que permite armar la malla desde cero: sin esto, la version limpia tendria el
    catalogo vacio y no habria de donde sacar ramos. Con esto, el usuario crea cada ramo con
-   su codigo, creditos, nivel y prerrequisitos, y puede corregir cualquiera si se equivoca. */
+   su codigo, creditos, nivel y prerrequisitos, y puede corregir cualquiera si se equivoca.
+   La ficha ampliada (2026-09-21) reparte los campos en tres bloques: Institucion, Identidad
+   y Percepcion. Los prerrequisitos se eligen con un buscador agil, no con un select multiple. */
 function modalRamo(cod){
   const c = cod ? CAT()[cod] : null;
-  const reqs = ((c && c.requisitos) || []).concat((c && c.requisitos_o) || []);
-  const otros = Object.keys(CAT()).filter(x => x !== cod).sort();
+  const reqs = ((c && c.requisitos) || []).concat([].concat(...((c && c.requisitos_o) || [])));
   const enUso = cod ? ramosBase().some(r => r.codigo === cod) : false;
-  const opciones = otros.map(x => '<option value="' + esc(x) + '"' +
-    (reqs.indexOf(x) >= 0 ? ' selected' : '') + '>' + esc(x) + ' · ' + esc(CAT()[x].nombre) + '</option>').join('');
+
   document.getElementById('modal-caja').className = 'modal-caja m-campo';
   document.getElementById('modal-caja').innerHTML =
     '<h2>' + (cod ? 'Editar el ramo ' + esc(cod) : 'Nuevo ramo') + '</h2>' +
     '<button class="cerrar" id="cerrar">Cerrar</button>' +
-    '<p class="ayuda">Con esto armas tu malla: los ramos que crees aquí quedan disponibles para ' +
-      'agregarlos al semestre desde la pestaña Malla.</p>' +
-    '<div class="campo"><span>Código</span><input id="r-cod" value="' + esc(cod || '') + '"' +
+
+    // ---------------- INSTITUCION ----------------
+    '<h4 class="bloque-tit">Institución</h4>' +
+    '<div class="campo"><span>Universidad</span><input id="r-univ" class="entrada" value="' +
+      esc((c && c.universidad) || '') + '" placeholder="opcional, ej. Universidad de Chile" autocomplete="off"></div>' +
+    '<div class="campo"><span>Carrera</span><input id="r-carrera" class="entrada" value="' +
+      esc((c && c.carrera) || '') + '" placeholder="opcional, ej. Ingeniería Civil" autocomplete="off"></div>' +
+
+    // ---------------- IDENTIDAD ----------------
+    '<h4 class="bloque-tit">Identidad</h4>' +
+    '<div class="campo"><span>Código</span><input id="r-cod" class="entrada" value="' + esc(cod || '') + '"' +
       (cod ? ' readonly' : '') + ' placeholder="MA1001" autocomplete="off"></div>' +
-    '<div class="campo"><span>Nombre</span><input id="r-nombre" value="' +
+    '<div class="campo"><span>Nombre real</span><input id="r-nombre" class="entrada" value="' +
       esc((c && c.nombre) || '') + '" placeholder="Cálculo Diferencial e Integral" autocomplete="off"></div>' +
-    '<div class="campo"><span>Créditos</span><input id="r-cred" type="number" min="0" max="40" step="1" value="' +
+    '<div class="campo"><span>Tramo</span>' +
+      '<select id="r-tramo">' +
+        '<option value="semestre"' + ((c && c.tramo) === 'semestre' ? ' selected' : '') + '>Semestre</option>' +
+        '<option value="trimestre"' + ((c && c.tramo) === 'trimestre' ? ' selected' : '') + '>Trimestre</option>' +
+        '<option value="nivel"' + ((c && c.tramo) === 'nivel' ? ' selected' : '') + '>Nivel</option>' +
+      '</select></div>' +
+    '<div class="campo"><span id="r-tramo-lbl">Nivel (número)</span>' +
+      '<input id="r-nivel" class="entrada" type="number" min="1" max="20" step="1" value="' + ((c && c.nivel) || 1) + '"></div>' +
+    '<div class="campo"><span>Sección (Plan común, Licenciatura...)</span>' +
+      '<select id="r-seccion">' + opcionesSeccion(c ? seccionDe(cod) : null) + '</select></div>' +
+    '<div class="campo"><span>Créditos (según la institución)</span>' +
+      '<input id="r-cred" class="entrada" type="number" min="0" max="40" step="1" value="' +
       ((c && c.creditos) || 0) + '"></div>' +
-    '<div class="campo"><span>Nivel (en qué semestre de la carrera va)</span>' +
-      '<input id="r-nivel" type="number" min="1" max="20" step="1" value="' + ((c && c.nivel) || 1) + '"></div>' +
+    '<div class="campo"><span>Espacio (cuánto dura)</span>' +
+      '<div class="fila" style="gap:8px;flex-wrap:nowrap">' +
+        '<select id="r-espacio-tipo">' +
+          '<option value="">— no fijado —</option>' +
+          '<option value="semestre"' + (espacioActual(c).tipo === 'semestre' ? ' selected' : '') + '>semestre(s)</option>' +
+          '<option value="trimestre"' + (espacioActual(c).tipo === 'trimestre' ? ' selected' : '') + '>trimestre(s)</option>' +
+          '<option value="semanas"' + (espacioActual(c).tipo === 'semanas' ? ' selected' : '') + '>semanas</option>' +
+        '</select>' +
+        '<input id="r-espacio-cant" class="entrada" type="number" min="1" max="52" step="1" placeholder="cantidad" style="width:90px" value="' +
+        (espacioActual(c).cantidad || '') + '">' +
+      '</div>' +
+      '<div class="pista">Un semestre, dos semestres, un trimestre o un plazo fijo en semanas (hay ramos que duran semanas).</div></div>' +
+    '<div class="campo"><span>Prerrequisitos</span><div id="r-req"></div>' +
+      '<div class="pista">Escribe para buscar en la malla y haz clic para elegir. Un ramo con requisitos se necesita antes de poder inscribir este.</div></div>' +
+    '<div class="campo"><span>Ramos equivalentes</span><div id="r-equi"></div>' +
+      '<div class="pista">Otros ramos que valen lo mismo (de tu malla o externos). Se prioriza la misma carrera.</div></div>' +
+
+    // ---------------- PERCEPCION ----------------
+    '<h4 class="bloque-tit">Percepción</h4>' +
+    '<div class="campo"><span>Demanda de tiempo</span>' + escalaDemanda('r-tiempo', c && c.demanda_tiempo) + '</div>' +
+    '<div class="campo"><span>Demanda académica</span>' + escalaDemanda('r-academica', c && c.demanda_academica) + '</div>' +
+    '<div class="campo"><span>Prioridad (ramos que abre)</span>' +
+      '<span class="mono" style="font-size:.85rem">' + ramosQueAbre(cod) + ' ramo(s) hasta el final</span>' +
+      '<div class="pista">Se calcula solo: cuántos ramos de la carrera dependen de este. No se edita.</div></div>' +
     '<div class="campo"><span>Tasa de aprobación (%)</span>' +
-      '<input id="r-aprob" type="number" min="0" max="100" step="1" placeholder="opcional" value="' +
+      '<input id="r-aprob" class="entrada" type="number" min="0" max="100" step="1" placeholder="opcional" value="' +
       ((c && c.aprobacion !== null && c.aprobacion !== undefined) ? c.aprobacion : '') + '"></div>' +
-    '<div class="campo"><span>Dificultad</span>' +
-      '<input id="r-dific" placeholder="opcional, ej. baja / media / alta" value="' +
-      esc((c && c.dificultad) || '') + '"></div>' +
-    '<div class="campo"><span>Prioridad</span>' +
-      '<input id="r-prior" placeholder="opcional, ej. alta / media / baja o un número" value="' +
-      esc((c && c.prioridad) || '') + '"></div>' +
     '<div class="campo"><span>Descripción</span>' +
       '<textarea id="r-desc" rows="2" placeholder="opcional: de qué trata el ramo" style="width:100%">' +
       esc((c && c.descripcion) || '') + '</textarea></div>' +
-    '<div class="campo"><span>Ramo equivalente (otro código que es el mismo ramo)</span>' +
-      '<input id="r-equi" placeholder="opcional, ej. MA3701" value="' +
-      esc((c && c.equivalente) || '') + '"></div>' +
-    '<div class="campo"><label class="llave"><input type="checkbox" id="r-anual"' +
-      ((c && c.anual) ? ' checked' : '') + '> Ramo anual: se cursa en dos semestres seguidos</label>' +
-      '<div class="pista">Se dibuja como un recuadro que ocupa su semestre y el siguiente, y la ' +
-      'columna de al lado le deja el espacio libre. Es lo que pasa con los ramos anuales de ' +
-      'especialidad.</div></div>' +
-    '<div class="campo"><span>Prerrequisitos (con Ctrl o Cmd eliges varios)</span>' +
-      '<select id="r-req" multiple size="6">' + opciones + '</select></div>' +
+
     '<div id="r-error" class="ayuda" style="color:var(--bad)"></div>' +
     '<div class="fila" style="justify-content:flex-end;gap:8px;margin-top:12px">' +
       (enUso ? '<button class="btn peligro" id="r-quitar">Quitar del semestre</button>' : '') +
@@ -53,10 +79,35 @@ function modalRamo(cod){
       '<button class="btn" id="r-cancelar">Cancelar</button>' +
       '<button class="btn acento" id="r-guardar">Guardar</button>' +
     '</div>';
+
   document.getElementById('modal').classList.add('on');
   document.getElementById('cerrar').onclick = cerrarEditor;
   document.getElementById('r-cancelar').onclick = cerrarEditor;
   const err = m => { document.getElementById('r-error').textContent = m; };
+
+  // El tramo cambia la etiqueta del numero.
+  const tramoSel = document.getElementById('r-tramo');
+  const tramoLbl = document.getElementById('r-tramo-lbl');
+  const tramoEtiqueta = () => ({semestre:'Semestre (número)', trimestre:'Trimestre (número)', nivel:'Nivel (número)'})[tramoSel.value] || 'Nivel (número)';
+  tramoSel.onchange = () => { tramoLbl.textContent = tramoEtiqueta(); };
+  tramoLbl.textContent = tramoEtiqueta();
+
+  montarSelectorRamos('r-req', reqs, cod);
+  montarSelectorEquivalentes('r-equi', (c && c.equivalentes) || [], cod, (c && c.equivalente));
+
+  // Escala de percepcion (demanda de tiempo y academica): un clic marca el punto, mueve la clase
+  // .on y deja el valor en data-val para que escalaDemandaElegida lo lea al guardar. Antes no se
+  // enlazaban, asi que la seleccion no reaccionaba y se guardaba null.
+  document.querySelectorAll('#modal-caja .escala .escala-punto').forEach(b => {
+    b.onclick = () => {
+      const escala = b.parentElement;
+      const n = Number(b.dataset.n);
+      escala.dataset.val = n;
+      escala.querySelectorAll('.escala-punto').forEach(p => p.classList.toggle('on', p === b));
+      const txt = escala.querySelector('.escala-txt');
+      if (txt) txt.textContent = DEMANDA_NOMBRES[n - 1];
+    };
+  });
 
   document.getElementById('r-guardar').onclick = () => {
     const nuevo = !cod;
@@ -67,22 +118,39 @@ function modalRamo(cod){
     if (!clave) return err('Falta el código del ramo.');
     if (!nombre) return err('Falta el nombre del ramo.');
     if (nuevo && CAT()[clave]) return err('Ya existe un ramo con el código ' + clave + '.');
-    const elegidos = [].slice.call(document.getElementById('r-req').selectedOptions)
-      .map(o => o.value).filter(x => x !== clave);
+    const elegidos = selectorRamosElegidos('r-req').filter(x => x !== clave);
+
+    const datos = {
+      nombre: nombre, creditos: cred, nivel: nivel,
+      requisitos: elegidos, requisitos_o: [],
+      tramo: tramoSel.value,
+      universidad: document.getElementById('r-univ').value.trim() || null,
+      carrera: document.getElementById('r-carrera').value.trim() || null
+    };
+
+    // espacio: solo si eligio tipo y cantidad. 2 semestres = anual (dibujo). Sin espacio fijado,
+    // el ramo deja de ser anual (se limpia el dato viejo).
+    const espTipo = document.getElementById('r-espacio-tipo').value;
+    const espCant = parseInt(document.getElementById('r-espacio-cant').value, 10);
+    if (espTipo && espCant) datos.espacio = {tipo: espTipo, cantidad: espCant};
+    else datos.espacio = null;
+    datos.anual = (espTipo === 'semestre' && espCant >= 2);
+
+    // equivalentes: la lista nueva, y de regalo se conserva 'equivalente' si hay uno unico
+    const equis = selectorEquivalentesElegidos('r-equi');
+    if (equis.length) datos.equivalentes = equis;
+
+    const secVal = document.getElementById('r-seccion').value;
+    if (secVal !== '' && secVal !== null) datos.seccion = Number(secVal);
+
+    datos.demanda_tiempo = escalaDemandaElegida('r-tiempo');
+    datos.demanda_academica = escalaDemandaElegida('r-academica');
+
     const aprob = document.getElementById('r-aprob').value.trim();
-    const dific = document.getElementById('r-dific').value.trim();
-    const prior = document.getElementById('r-prior').value.trim();
-    const desc = document.getElementById('r-desc').value.trim();
-    const equi = document.getElementById('r-equi').value.trim();
-    // Los campos opcionales entran solo si el alumno escribio algo: vacio = sin dato (null).
-    const datos = {nombre: nombre, creditos: cred, nivel: nivel,
-                   requisitos: elegidos, requisitos_o: [],
-                   anual: document.getElementById('r-anual').checked};
     if (aprob !== '') datos.aprobacion = Math.max(0, Math.min(100, parseInt(aprob, 10) || 0));
-    if (dific) datos.dificultad = dific;
-    if (prior) datos.prioridad = prior;
+    const desc = document.getElementById('r-desc').value.trim();
     if (desc) datos.descripcion = desc;
-    if (equi) datos.equivalente = equi.toUpperCase();
+
     ramoEnCatalogo(clave, datos);
     guardar('Ramo ' + clave + (nuevo ? ' creado' : ' actualizado'));
     cerrarEditor(); resetFiltros(); arranque();
@@ -96,6 +164,148 @@ function modalRamo(cod){
   const bQ = document.getElementById('r-quitar');
   if (bQ) bQ.onclick = () => { quitarRamo(cod); cerrarEditor(); };
 }
+
+/* Escala de 1 a 5 para las demandas de percepcion. Devuelve los botones (o rayitas) y deja el
+   valor elegido marcado. Se usa para demanda de tiempo y demanda academica. */
+const DEMANDA_NOMBRES = ['muy baja','baja','media','alta','muy alta'];
+/* Espacio actual de un ramo para el editor: lee {tipo,cantidad}, y si no hay campo 'espacio'
+   pero el ramo venia marcado 'anual' (import viejo), lo traduce a 2 semestres. */
+function espacioActual(c){
+  if (c && c.espacio && c.espacio.tipo) return {tipo: c.espacio.tipo, cantidad: c.espacio.cantidad || 1};
+  if (c && c.anual) return {tipo: 'semestre', cantidad: 2};
+  return {tipo: '', cantidad: null};
+}
+function escalaDemanda(id, actual){
+  return '<div class="escala" data-escala="' + id + '" data-val="' + (actual || 0) + '">' +
+    [1,2,3,4,5].map(n =>
+      '<button type="button" class="escala-punto' + (actual === n ? ' on' : '') + '" data-n="' + n + '" title="' + DEMANDA_NOMBRES[n-1] + '"></button>'
+    ).join('') +
+    '<span class="escala-txt">' + (actual ? DEMANDA_NOMBRES[actual-1] : 'sin dato') + '</span></div>';
+}
+function escalaDemandaElegida(id){
+  const el = document.querySelector('#modal-caja [data-escala="' + id + '"]');
+  const v = el ? Number(el.dataset.val) || 0 : 0;
+  return v || null;
+}
+
+/* Selector agil de prerrequisitos: un buscador que filtra la malla + chips removibles de lo
+   elegido. No depende de un <select multiple> torpe. La lista elegida vive en un input oculto
+   con los codigos separados por coma; las funciones elegidos/leer la leen y escriben. */
+function montarSelectorRamos(cajaId, iniciales, codExcluido){
+  const caja = document.getElementById(cajaId);
+  if (!caja) return;
+  const todos = Object.keys(CAT()).filter(x => x !== codExcluido)
+    .map(x => ({cod:x, nombre:CAT()[x].nombre, nivel:CAT()[x].semestre_num}))
+    .sort((a,b) => a.nivel - b.nivel || a.cod.localeCompare(b.cod));
+  let elegidos = iniciales.slice();
+  const pintar = () => {
+    const chips = elegidos.map(x =>
+      '<span class="chip-req" data-cod="' + esc(x) + '">' + esc(x) +
+        '<button type="button" class="ch-req-quita" data-cod="' + esc(x) + '" title="Quitar">×</button></span>'
+    ).join('');
+    const filter = (document.getElementById(cajaId + '-busca') || {}).value || '';
+    const f = filter.trim().toUpperCase();
+    const lista = todos.filter(t => !elegidos.includes(t.cod) &&
+      (!f || t.cod.includes(f) || (t.nombre || '').toUpperCase().includes(f)))
+      .slice(0, 30);
+    const items = lista.map(t =>
+      '<button type="button" class="req-opcion" data-cod="' + esc(t.cod) + '">' +
+        '<span class="mono">' + esc(t.cod) + '</span>' +
+        '<span class="nm2">' + esc(t.nombre) + '</span>' +
+        '<span class="sm">' + (t.nivel !== 99 ? 'nivel ' + t.nivel : 'electivo') + '</span></button>'
+    ).join('');
+    caja.innerHTML =
+      '<div class="fila" style="gap:6px;flex-wrap:wrap">' + (chips || '<span class="vacio">ninguno</span>') + '</div>' +
+      '<input type="text" class="entrada" id="' + cajaId + '-busca" placeholder="Buscar por código o nombre..." style="width:100%;margin-top:6px">' +
+      '<div class="req-lista">' + (items || (f ? '<span class="vacio">sin resultados</span>' : '')) + '</div>';
+    caja.querySelectorAll('.ch-req-quita').forEach(b => b.onclick = () => {
+      elegidos = elegidos.filter(x => x !== b.dataset.cod); pintar();
+    });
+    caja.querySelectorAll('.req-opcion').forEach(b => b.onclick = () => {
+      if (!elegidos.includes(b.dataset.cod)) elegidos.push(b.dataset.cod); pintar();
+    });
+    const busca = document.getElementById(cajaId + '-busca');
+    if (busca) busca.oninput = pintar;
+  };
+  pintar();
+}
+function selectorRamosElegidos(cajaId){
+  const caja = document.getElementById(cajaId);
+  if (!caja) return [];
+  return [].slice.call(caja.querySelectorAll('.chip-req')).map(c => c.dataset.cod);
+}
+
+/* Equivalentes: igual que los prerrequisitos (chips + buscador), pero cada equivalente lleva un
+   origen (misma malla / externo). Se prioriza la misma carrera. */
+function montarSelectorEquivalentes(cajaId, iniciales, codExcluido, equivalenteViejo){
+  const caja = document.getElementById(cajaId);
+  if (!caja) return;
+  // el viejo campo 'equivalente' (una sola clave) entra como equivalente 'misma' si no esta ya
+  let elegidos = iniciales.slice();
+  if (equivalenteViejo && !elegidos.some(e => (e.cod || e) === equivalenteViejo) && equivalenteViejo !== codExcluido) {
+    elegidos.push({cod: equivalenteViejo, origen: 'misma'});
+  }
+  const todos = Object.keys(CAT()).filter(x => x !== codExcluido)
+    .map(x => ({cod:x, nombre:CAT()[x].nombre})).sort((a,b) => a.cod.localeCompare(b.cod));
+  const pintar = () => {
+    const chips = elegidos.map(e => {
+      const cod = e.cod || e;
+      return '<span class="chip-req"' + (e.origen === 'externa' ? ' data-ext="1"' : '') + ' data-cod="' + esc(cod) + '">' +
+        esc(cod) + (e.origen === 'externa' ? ' · externo' : '') +
+        '<button type="button" class="ch-req-quita" data-cod="' + esc(cod) + '" title="Quitar">×</button></span>';
+    }).join('');
+    const f = ((document.getElementById(cajaId + '-busca') || {}).value || '').trim().toUpperCase();
+    const lista = todos.filter(t => !elegidos.some(e => (e.cod || e) === t.cod) &&
+      (!f || t.cod.includes(f) || (t.nombre || '').toUpperCase().includes(f))).slice(0, 30);
+    const items = lista.map(t =>
+      '<button type="button" class="req-opcion" data-cod="' + esc(t.cod) + '">' +
+        '<span class="mono">' + esc(t.cod) + '</span><span class="nm2">' + esc(t.nombre) + '</span></button>'
+    ).join('');
+    caja.innerHTML =
+      '<div class="fila" style="gap:6px;flex-wrap:wrap">' + (chips || '<span class="vacio">ninguno</span>') + '</div>' +
+      '<input type="text" class="entrada" id="' + cajaId + '-busca" placeholder="Buscar por código (también puedes escribir uno externo)..." style="width:100%;margin-top:6px">' +
+      '<div class="req-lista">' + items + '</div>';
+    caja.querySelectorAll('.ch-req-quita').forEach(b => b.onclick = () => {
+      elegidos = elegidos.filter(e => (e.cod || e) !== b.dataset.cod); pintar();
+    });
+    caja.querySelectorAll('.req-opcion').forEach(b => b.onclick = () => {
+      if (!elegidos.some(e => (e.cod || e) === b.dataset.cod)) elegidos.push({cod: b.dataset.cod, origen: 'misma'});
+      pintar();
+    });
+    const busca = document.getElementById(cajaId + '-busca');
+    if (busca) busca.onkeydown = ev => {
+      // Enter con texto que no coincide con ningun ramo = equivalente externo
+      if (ev.key === 'Enter') {
+        const val = busca.value.trim().toUpperCase();
+        if (val && !todos.some(t => t.cod === val) && !elegidos.some(e => (e.cod || e) === val)) {
+          elegidos.push({cod: val, origen: 'externa'});
+          busca.value = ''; pintar();
+          ev.preventDefault();
+        }
+      }
+    };
+  };
+  pintar();
+}
+function selectorEquivalentesElegidos(cajaId){
+  const caja = document.getElementById(cajaId);
+  if (!caja) return [];
+  return [].slice.call(caja.querySelectorAll('.chip-req')).map(c => ({
+    cod: c.dataset.cod, origen: c.dataset.ext ? 'externa' : 'misma'
+  }));
+}
+
+/* Las opciones del campo "Sección" del editor: "Sin sección" + las que existen (sigla · nombre). */
+function opcionesSeccion(actual){
+  const secs = SECC();
+  let out = '<option value="">— Sin sección —</option>';
+  secs.forEach((s, i) => {
+    out += '<option value="' + i + '"' + (actual === i ? ' selected' : '') + '>' +
+      esc((s.sigla ? s.sigla + ' · ' : '') + s.nombre) + '</option>';
+  });
+  return out;
+}
+
 function modalNuevoSemestre(){
   memoEstados = null;
   const e = calcularEstados();

@@ -80,6 +80,14 @@ function herederoDe(cod){
    columna de al lado le reserva el alto para que no le quede nada debajo (eso lo hace
    acomodarAnuales). */
 function esAnual(cod){ return !!(CAT()[cod] || {}).anual; }
+/* Texto legible del espacio/duracion de un ramo, para mostrarlo en la ficha. */
+function txtEspacio(esp){
+  if (!esp || !esp.tipo) return '';
+  const n = esp.cantidad || 1;
+  if (esp.tipo === 'semanas') return n + ' semana' + (n === 1 ? '' : 's');
+  if (esp.tipo === 'trimestre') return n + ' trimestre' + (n === 1 ? '' : 's');
+  return n + ' semestre' + (n === 1 ? '' : 's');
+}
 function semestresQueOcupa(cod){
   if (!esAnual(cod)) return 1;
   const n = parseInt((CAT()[cod] || {}).semestres, 10);
@@ -124,10 +132,10 @@ function nodoHTML(cod, compacto){
 }
 function renderMalla(){
   renderDeshacer();
-  renderFicha();
-  // La configuracion de la malla (ficha del ramo y colores) vive en esta misma pestana.
-  renderConfigMalla();
-  renderColoresMalla();
+  // La configuracion de la malla (secciones) vive en esta misma pestana. Los colores de los
+  // ramos salieron de aca (2026-09-21): renderColoresMalla() se conserva, a la espera de su
+  // nuevo lugar.
+  renderSecciones();
   const e = estados();
   if (!Object.keys(CAT()).length) {
     // La version limpia recien empezada no tiene nada que dibujar: se explica como empezar en
@@ -180,13 +188,46 @@ function renderMalla(){
       : '<span style="color:var(--muted)">Estas son todas las líneas de prerrequisito. Elige un ramo para ' +
         'quedarte solo con las suyas.</span>');
 
-  document.getElementById('malla').innerHTML = '<svg id="malla-svg"></svg>' + NIVELES().map(n => {
-    const ramos = n.ramos.filter(c => CAT()[c]);
-    const cred = ramos.reduce((a, c) => a + (CAT()[c].creditos || 0), 0);
-    const apretado = n.nivel === 99;
-    return '<div class="malla-col' + (apretado ? ' col-extras' : '') + '" data-nivel="' + n.nivel + '">' +
-      '<div class="col-tit">' + esc(n.titulo) + ' <span class="col-cred">' + cred + ' cr</span></div>' +
-      ramos.map(x => nodoHTML(x, apretado)).join('') + '</div>';
+  // Arma las columnas. Si hay secciones definidas, se agrupan por seccion: cada seccion es un
+  // bloque con su titulo (sigla + nombre) CENTRADO sobre sus columnas, un fondo suave y una
+  // linea vertical que la separa de la siguiente. Los niveles sin seccion van en un bloque aparte.
+  const nivelesTodos = NIVELES();
+  const secs = SECC();
+  // seccion de cada nivel (la del primer ramo que tenga una); -1 = sin seccion
+  const secDeNivel = n => {
+    for (const cod of n.ramos) { const s = seccionDe(cod); if (s !== null) return s; }
+    return -1;
+  };
+  let bloques;
+  if (secs.length) {
+    bloques = [];
+    let actual = null;
+    nivelesTodos.forEach(n => {
+      const sIdx = secDeNivel(n);
+      if (actual && actual.idx === sIdx) { actual.niveles.push(n); return; }
+      actual = {idx: sIdx, niveles: [n]};
+      bloques.push(actual);
+    });
+  } else {
+    bloques = [{idx: -1, niveles: nivelesTodos}];
+  }
+
+  document.getElementById('malla').innerHTML = '<svg id="malla-svg"></svg>' + bloques.map(b => {
+    const s = (b.idx >= 0) ? secs[b.idx] : null;
+    const titulo = s
+      ? '<div class="sec-titulo"' + (s.color ? ' style="border-color:' + esc(s.color) + '"' : '') + '>' +
+          (s.sigla ? '<span class="sigla">' + esc(s.sigla) + '</span>' : '') + esc(s.nombre) + '</div>'
+      : '';
+    return '<div class="seccion-bloque"' + (s && s.color ? ' style="--sec-color:' + esc(s.color) + '"' : '') + '>' +
+      titulo +
+      '<div class="columnas">' + b.niveles.map(n => {
+        const ramos = n.ramos.filter(c => CAT()[c]);
+        const cred = ramos.reduce((a, c) => a + (CAT()[c].creditos || 0), 0);
+        const apretado = n.nivel === 99;
+        return '<div class="malla-col' + (apretado ? ' col-extras' : '') + '" data-nivel="' + n.nivel + '">' +
+          '<div class="col-tit">' + esc(n.titulo) + ' <span class="col-cred">' + cred + ' cr</span></div>' +
+          ramos.map(x => nodoHTML(x, apretado)).join('') + '</div>';
+      }).join('') + '</div></div>';
   }).join('');
   document.querySelectorAll('#malla .nodo').forEach(n => n.onclick = () => {
     const cod = n.dataset.cod;
@@ -391,15 +432,25 @@ function renderMallaDetalle(){
         c.dificultad ? ' · dificultad: ' + esc(c.dificultad) : ''}${
         c.prioridad ? ' · prioridad: ' + esc(c.prioridad) : ''}</div>
 
+      ${(c.universidad || c.carrera) ? '<div class="bloque"><h4>Institución</h4><p class="ficha-texto">' +
+        [c.universidad, c.carrera].filter(Boolean).join(' · ') + '</p></div>' : ''}
+      ${c.espacio ? '<div class="bloque"><h4>Espacio</h4><p class="ficha-texto">' +
+        esc(txtEspacio(c.espacio)) + '</p></div>' : ''}
+      ${c.demanda_tiempo || c.demanda_academica ? '<div class="bloque"><h4>Percepción</h4><p class="ficha-texto">' +
+        (c.demanda_tiempo ? 'demanda de tiempo: ' + DEMANDA_NOMBRES[c.demanda_tiempo - 1] + ' · ' : '') +
+        (c.demanda_academica ? 'demanda académica: ' + DEMANDA_NOMBRES[c.demanda_academica - 1] : '') +
+        '</p></div>' : ''}
+
       ${c.descripcion ? '<div class="bloque"><h4>Descripción</h4><p class="ficha-texto">' +
         esc(c.descripcion).replace(/\n/g, '<br>') + '</p></div>' : ''}
+      ${(c.equivalentes && c.equivalentes.length) ? '<div class="bloque"><h4>Ramos equivalentes</h4><p class="ficha-texto">' +
+        c.equivalentes.map(ev => esc(ev.cod) + (ev.origen === 'externa' ? ' (externo)' : '')).join(', ') + '</p></div>' : ''}
       ${c.equivalente ? '<div class="bloque"><h4>Ramo equivalente</h4><p class="ficha-texto">' +
         esc(c.equivalente) + (CAT()[c.equivalente] ? ' — ' + esc(CAT()[c.equivalente].nombre || '') : '') +
         '</p></div>' : ''}
 
       <div class="fila" style="gap:8px;margin-top:10px">
         <button class="btn" id="md-editar">Editar este ramo</button>
-        <button class="btn" id="md-ficha">Ficha del ramo</button>
       </div>
       <div class="bloque"><h4>Antes necesitas</h4>
         ${((c.requisitos || []).length || (c.requisitos_o || []).length)
@@ -437,8 +488,6 @@ function renderMallaDetalle(){
   });
   const bEd = document.getElementById('md-editar');
   if (bEd) bEd.onclick = () => modalRamo(mallaSel);
-  const bFi = document.getElementById('md-ficha');
-  if (bFi) bFi.onclick = () => modalFicha(mallaSel);      // corregir un ramo mal puesto
 }
 function alternarAprobado(cod){
   memoEstados = null;
@@ -471,7 +520,7 @@ function alternarAprobado(cod){
    semestre y en las preferencias, no en la malla, y no viajan con ella. Sirve para compartir una
    malla corregida con un companero o respaldarla para partir de nuevo. */
 const CAMPOS_MALLA = ['nombre','creditos','nivel','semestre','semestre_num','requisitos',
-                      'requisitos_o','anual','tipo','en_malla','equivalente'];
+                      'requisitos_o','anual','tipo','en_malla','equivalente','seccion'];
 function exportarMalla(){
   const cat = CAT();
   const codigos = Object.keys(cat);
@@ -487,6 +536,7 @@ function exportarMalla(){
     carrera: (D.carrera || {}),
     catalogo: malla,
     niveles: NIVELES().map(n => ({nivel:n.nivel, titulo:n.titulo})),
+    secciones: SECC().map(s => ({nombre:s.nombre, sigla:s.sigla, color:s.color, niveles:s.niveles || []})),
     // NIVELES() ya devuelve los ramos repartidos por su nivel actual, pero el catalogo ya los trae.
   };
   const a = document.createElement('a');

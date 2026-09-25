@@ -4,7 +4,7 @@
    solo selector por estado queda coherente en los dos temas. */
 const AV_FABRICA = {
   tema:'clasico', relleno:'suave', densidad:'normal', grosor:'normal', esquinas:'redondeadas',
-  candado:true, creditos:true,
+  candado:true, creditos:true, barra:'manual',
   colores:{aprobado:'#16a34a', curso:'#eab308', disponible:'#2563eb', bloqueado:'#94a3b8'}
 };
 /* Los temas que existen, en el orden en que salen en Ajustes.
@@ -17,12 +17,14 @@ const AV_FABRICA = {
    lineas separadas y faciles de olvidar: el tema quedaba en la lista pero no se aplicaba.
    Ahora se recorre esta lista, asi que no se puede olvidar. */
 const TEMAS = [['clasico', 'Clásico'], ['negro', 'Negro'],
-               ['medianoche', 'Medianoche'], ['deepsea', 'DeepSea']];
+               ['medianoche', 'Medianoche'], ['deepsea', 'DeepSea'], ['bosque', 'Bosque'],
+               ['sepia', 'Sepia'], ['vino', 'Vino'], ['alto-contraste', 'Alto contraste']];
 const NOMBRES_TEMA = TEMAS.map(t => t[0]);
 
 // El fondo de cada tema. El resto de los colores se calculan mezclando contra este.
 const FONDO_TEMA = {clasico:'#ffffff', negro:'#1e1e1e', medianoche:'#131314',
-                    deepsea:'#071a2b'};
+                    deepsea:'#071a2b', bosque:'#eef4ee', sepia:'#f4ecd8',
+                    vino:'#150a0c', 'alto-contraste':'#000000'};
 function fondoTema(a){ return FONDO_TEMA[a.tema] || '#ffffff'; }
 const AV_DENSIDAD = {
   compacta:{pad:'4px 7px',  fuente:'.72rem', mgap:'26px', cgap:'6px'},
@@ -30,8 +32,8 @@ const AV_DENSIDAD = {
   amplia:  {pad:'10px 12px', fuente:'.86rem', mgap:'54px', cgap:'11px'}
 };
 const AV_GROSOR = {fina:1, normal:1.6, gruesa:2.6};
-const AV_ESTADOS = [['aprobado','--ap','Aprobado'], ['curso','--cu','En curso'],
-                    ['disponible','--di','Disponible'], ['bloqueado','--bl','Bloqueado']];
+const AV_ESTADOS = [['aprobado','--malla-aprobado','Aprobado'], ['curso','--malla-curso','En curso'],
+                    ['disponible','--malla-disponible','Disponible'], ['bloqueado','--malla-bloqueado','Bloqueado']];
 function av(){
   if (!E.ajustes.av) E.ajustes.av = {};
   const a = E.ajustes.av;
@@ -49,7 +51,13 @@ function abrirBorrador(){
 }
 const AV_ETIQUETAS = {tema:'Tema', relleno:'Relleno de los estados', densidad:'Densidad',
                       grosor:'Grosor de las líneas', esquinas:'Esquinas',
-                      candado:'Candado en la malla', creditos:'Créditos en la malla'};
+                      candado:'Candado en la malla', creditos:'Créditos en la malla',
+                      // barra/barraPos/barraEstilo faltaban aqui. AV_ETIQUETAS es la lista que
+                      // cambiosDeAjustes() recorre para decidir si hay algo sin guardar; al no
+                      // estar, pintarBarraAjustes() veia "0 cambios", anulaba el borrador y
+                      // descartaba en silencio lo elegido en Navegacion (quedaba "en blanco").
+                      barra:'Modo de la barra', barraPos:'Posición de la barra',
+                      barraEstilo:'Estilo de la barra'};
 function valorLegible(k, v){ return typeof v === 'boolean' ? (v ? 'sí' : 'no') : String(v); }
 /* Que cambio y en que, para el resumen de la barra. Sin esto, "hay cambios" es un numero que no dice
    nada y el usuario tiene que acordarse de lo que toco. */
@@ -129,7 +137,7 @@ function aContraste(c1, c2){
 }
 function aplicarAvanzado(){
   const a = avVista(), d = AV_DENSIDAD[a.densidad] || AV_DENSIDAD.normal;
-  const oscuro = a.tema !== 'clasico';         // Negro y Medianoche comparten el calculo de contraste
+  const oscuro = (a.tema !== 'clasico' && a.tema !== 'bosque' && a.tema !== 'sepia');   // Clasico, Bosque y Sepia son claros
   const base = fondoTema(a);
   const suave = (c, t) => aMezcla(c, base, t);
   const vars = ['--nodo-pad:' + d.pad, '--nodo-fuente:' + d.fuente, '--malla-gap:' + d.mgap,
@@ -152,8 +160,30 @@ function aplicarAvanzado(){
   });
   NOMBRES_TEMA.forEach(n => document.body.classList.toggle('tema-' + n, a.tema === n));
   document.body.classList.toggle('relleno-solido', a.relleno === 'solido');
+  // El modo de la barra lateral lo aplica el motor de la barra (comun/08-barra.js),
+  // que vive en window.mimoBarra. Se le pasa el valor elegido en Ajustes.
+  if (window.mimoBarra) {
+    window.mimoBarra.ponerModo(a.barra || 'manual');
+    if (window.mimoBarra.ponerPos) window.mimoBarra.ponerPos(a.barraPos || 'izquierda');
+    if (window.mimoBarra.ponerEstilo) window.mimoBarra.ponerEstilo(a.barraEstilo || 'clasica');
+  }
+  // La hoja #av-vars se escribe en dos ambitos, y cada uno por una razon:
+  //   - :root lleva TODAS las variables. Es lo que pinta a los temas que no definen colores de
+  //     estado (negro, medianoche, deepsea) y el unico ambito que ve el tema clasico.
+  //   - body.tema-<X> lleva SOLO los colores de estado, y SOLO si el usuario cambio alguno. Si no
+  //     lo toco, manda el tema: bosque, sepia, vino y alto contraste traen a proposito su propia
+  //     paleta de estados, y pisarla seria cambiarle el diseno a quien no pidio nada.
+  // El fallo que esto arregla: esos mismos cuatro temas definen los estados en su body.tema-*, que
+  // tiene MAS especificidad que :root. Escribirlos en :root hacia que se perdiera el color elegido
+  // EN SILENCIO. Con el mismo selector del tema y la hoja despues en el documento, gana el usuario.
+  const FORMA = ['--nodo-pad', '--nodo-fuente', '--malla-gap', '--col-gap', '--linea', '--radio'];
+  const deColor = vars.filter(v => !FORMA.some(f => v.indexOf(f + ':') === 0));
+  const colorTocado = AV_ESTADOS.some(x => (a.colores || {})[x[0]] !== AV_FABRICA.colores[x[0]]);
   const hoja = document.getElementById('av-vars');
-  if (hoja) hoja.textContent = ':root{' + vars.join(';') + '}';
+  if (hoja) {
+    hoja.textContent = ':root{' + vars.join(';') + '}' +
+      (colorTocado ? 'body.tema-' + a.tema + '{' + deColor.join(';') + '}' : '');
+  }
 }
 function avSeg(clave, opciones){
   const a = avVista();
@@ -163,7 +193,7 @@ function avSeg(clave, opciones){
 }
 function renderAvanzado(){
   const a = avVista();
-  const oscuro = a.tema !== 'clasico';
+  const oscuro = (a.tema !== 'clasico' && a.tema !== 'bosque' && a.tema !== 'sepia');   // mismo criterio que aplicarAvanzado
   const muestra = (estado) => {
     const c = a.colores[estado];
     const fondo = a.relleno === 'solido' ? c : aMezcla(c, fondoTema(a), .86);
@@ -182,46 +212,33 @@ function renderAvanzado(){
       : (oscuro ? aMezcla(c, '#ffffff', .58) : aMezcla(c, '#000000', .5));
     return aContraste(fondo, texto);
   };
+  // "?" junto al nombre: la explicacion larga va en el title del icono, no como parrafo suelto
+  // que empuja y dispersa la fila.
+  const pista = t => '<span class="ayuda-ico" title="' + esc(t) + '">?</span>';
   document.getElementById('avanzado').innerHTML =
-    '<div class="av-fila"><span class="eti">Tema</span>' +
-      avSeg('tema', TEMAS) +
-      '<span class="pista">Clásico es el de día. Negro es el gris oscuro de escritorio. Medianoche ' +
-      'es el más apagado, para no encandilar de noche. DeepSea es azul de mar profundo, el más ' +
-      'frío: va bien en pantallas con mucha luz ambiente.</span></div>' +
-    '<div class="av-fila"><span class="eti">Relleno de los estados</span>' +
-      avSeg('relleno', [['suave','Suave'], ['solido','Todo pintado']]) +
-      '<span class="pista">Con "todo pintado", un ramo aprobado es un recuadro verde entero en vez de un ' +
-      'fondo pálido con borde de color.</span></div>' +
-    '<div class="av-fila"><span class="eti">Colores de los estados</span>' +
+    '<div class="av-fila"><span class="eti">Relleno de los estados</span>' + pista('Con "todo pintado", un ramo aprobado es un recuadro verde entero en vez de un fondo pálido con borde de color.') +
+      avSeg('relleno', [['suave','Suave'], ['solido','Todo pintado']]) + '</div>' +
+    '<div class="av-fila"><span class="eti">Colores de los estados</span>' + pista('De este color se calculan solos el fondo, el borde y el texto, en los dos temas. Abajo, el contraste de cada uno (sobre 4.5 se lee bien).') +
       '<span style="display:flex;gap:12px;flex-wrap:wrap">' +
       AV_ESTADOS.map(x => '<span class="av-color"><input type="color" data-avcolor="' + x[0] +
         '" value="' + a.colores[x[0]] + '" title="' + x[2] + '"><span>' + x[2] + '</span></span>').join('') +
-      '</span><button class="mini" id="av-fabrica">Volver al diseño de fábrica</button>' +
-      '<span class="pista">De este color se calculan solos el fondo, el borde y el texto, en los dos temas. ' +
-      'Abajo, el contraste de cada uno (sobre 4.5 se lee bien).</span></div>' +
+      '</span><button class="mini" id="av-fabrica">Volver al diseño de fábrica</button></div>' +
     '<div class="av-fila"><span class="eti">Cómo se verían</span><span class="av-muestra">' +
       AV_ESTADOS.map(x => '<span style="display:flex;align-items:center;gap:4px">' + muestra(x[0]) +
         '<b style="color:var(--fg)">' + x[2] + '</b> <span>(' + contra(x[0]).toFixed(1) + ':1)</span></span>').join('') +
       '</span></div>' +
-    '<div class="av-fila"><span class="eti">Tamaño de las tarjetas</span>' +
-      avSeg('densidad', [['compacta','Compacta'], ['normal','Normal'], ['amplia','Amplia']]) +
-      '<span class="pista">Más compacto entra más malla en pantalla; más amplio se lee más cómodo.</span></div>' +
-    '<div class="av-fila"><span class="eti">Grosor de las líneas</span>' +
-      avSeg('grosor', [['fina','Fina'], ['normal','Normal'], ['gruesa','Gruesa']]) +
-      '<span class="pista">Sólo afecta a las líneas de prerrequisito de la malla.</span></div>' +
-    '<div class="av-fila"><span class="eti">Esquinas</span>' +
-      avSeg('esquinas', [['redondeadas','Redondeadas'], ['rectas','Rectas']]) +
-      '<span class="pista">La forma de las tarjetas de la malla.</span></div>' +
-    '<div class="av-fila"><span class="eti">Icono de estado</span>' +
-      '<input type="checkbox" id="av-candado"' + (a.candado ? ' checked' : '') + '>' +
-      '<span class="pista">El candadito, el lápiz o el visto bueno en la esquina de cada ramo.</span></div>' +
-    '<div class="av-fila"><span class="eti">Créditos en las tarjetas</span>' +
-      '<input type="checkbox" id="av-creditos"' + (a.creditos ? ' checked' : '') + '>' +
-      '<span class="pista">Los "6 cr" al pie de cada ramo.</span></div>' +
-    '<div class="av-fila"><span class="eti">Sumar un ramo</span>' +
-      '<span class="pista">Cada tarjeta de la malla trae un <b>+</b> para agregar ese ramo a tu semestre en ' +
-      'curso (queda "en curso", con su columna de horas y su espacio en Notas), y un <b>−</b> para sacarlo. ' +
-      'Los ramos que ya están en el semestre muestran la resta.</span></div>';
+    '<div class="av-fila"><span class="eti">Tamaño de las tarjetas</span>' + pista('Más compacto entra más malla en pantalla; más amplio se lee más cómodo.') +
+      avSeg('densidad', [['compacta','Compacta'], ['normal','Normal'], ['amplia','Amplia']]) + '</div>' +
+    '<div class="av-fila"><span class="eti">Grosor de las líneas</span>' + pista('Sólo afecta a las líneas de prerrequisito de la malla.') +
+      avSeg('grosor', [['fina','Fina'], ['normal','Normal'], ['gruesa','Gruesa']]) + '</div>' +
+    '<div class="av-fila"><span class="eti">Esquinas</span>' + pista('La forma de las tarjetas de la malla.') +
+      avSeg('esquinas', [['redondeadas','Redondeadas'], ['rectas','Rectas']]) + '</div>' +
+    '<div class="av-fila"><span class="eti">Icono de estado</span>' + pista('El candadito, el lápiz o el visto bueno en la esquina de cada ramo.') +
+      '<input type="checkbox" id="av-candado"' + (a.candado ? ' checked' : '') + '></div>' +
+    '<div class="av-fila"><span class="eti">Créditos en las tarjetas</span>' + pista('Los "6 cr" al pie de cada ramo.') +
+      '<input type="checkbox" id="av-creditos"' + (a.creditos ? ' checked' : '') + '></div>' +
+    '<div class="av-fila"><span class="eti">Sumar un ramo</span>' + pista('Cada tarjeta de la malla trae un + para agregar ese ramo a tu semestre en curso (queda "en curso", con su columna de horas y su espacio en Notas), y un − para sacarlo. Los ramos que ya están en el semestre muestran la resta.') +
+      '</div>';
   document.getElementById('av-fabrica').onclick = () => {
     abrirBorrador();
     avBorrador = JSON.parse(JSON.stringify(AV_FABRICA));

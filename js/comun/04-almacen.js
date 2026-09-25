@@ -144,7 +144,13 @@ function colorDe(cod){
   const r = ramosH().find(x => x.codigo === cod) || cursoDe(cod);
   return r ? r.color : '#94a3b8';
 }
-function todosEventos(){ return semActivo().eventos.concat(est().nuevas || []); }
+// Todos los eventos del calendario: los del semestre activo (de fabrica + creados por el usuario)
+// MAS los personales. Cuando no hay semestre, est() devuelve E.personal, asi que est().nuevas son
+// los eventos personales y el calendario funciona sin haber creado ningun semestre.
+function todosEventos(){
+  const s = semActivo();
+  return (s.eventos || []).concat(est().nuevas || []);
+}
 function eventoPorId(id){ return todosEventos().find(e => String(e.id) === String(id)); }
 // "Sin asignar" no se guarda como un numero fijo: es lo que sobra de las horas que traia el Excel
 // una vez que repartes minutos entre los ramos. Al escribir en un ramo, el gris baja y el color sube.
@@ -207,9 +213,6 @@ const FORMATOS_HORA = [
   ['min',       'Solo minutos',     '150m'],
   ['hdec',      'Horas decimales',  '2,5h'],
 ];
-function partesHora(min){
-  return [Math.floor(min / 60), min % 60];
-}
 function unaHora(k, min){
   const h = Math.floor(min / 60), m = min % 60;
   if (k === 'reloj') return h + ':' + dos(m);

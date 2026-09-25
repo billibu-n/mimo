@@ -67,6 +67,43 @@ function NIVELES(){
   }));
 }
 
+
+/* ---------------- secciones de la malla (Plan comun / Licenciatura / Especialidad...)
+
+   Una seccion agrupa un rango de NIVELES de la carrera. El modelo de datos es por RAMO: cada
+   ramo lleva 'seccion' (el indice en E.secciones), y el usuario lo asigna por rango de niveles
+   (marca "del semestre I al IV = Plan comun") o ramo a ramo en su editor. La sigla (PC, LI, ES)
+   la pone el usuario, y el color tambien. */
+function SECC(){ return E.secciones || []; }
+
+/* La seccion a la que pertenece un ramo: su campo 'seccion' si apunta a una seccion que existe. */
+function seccionDe(cod){
+  const c = CAT()[cod];
+  if (!c || c.seccion === undefined || c.seccion === null || c.seccion === '') return null;
+  const i = Number(c.seccion);
+  const secs = SECC();
+  return (i >= 0 && i < secs.length) ? i : null;
+}
+
+/* Asigna una seccion (por indice) a todos los ramos de los niveles pedidos (o la quita si es -1).
+   Devuelve cuantos ramos quedaron marcados. */
+function asignarSeccionPorNiveles(idxSeccion, desde, hasta){
+  const niveles = [];
+  for (let n = desde; n <= hasta; n++) niveles.push(n);
+  const cat = CAT();
+  let cuantos = 0;
+  Object.keys(cat).forEach(cod => {
+    const c = cat[cod];
+    const nv = (c.nivel > 0 && c.nivel < 99) ? Number(c.nivel) : 99;
+    if (niveles.indexOf(nv) < 0) return;
+    c.seccion = idxSeccion;
+    cuantos++;
+  });
+  if (idxSeccion >= 0 && SECC()[idxSeccion]) SECC()[idxSeccion].niveles = niveles;
+  guardar('Sección asignada a ' + cuantos + ' ramos');
+  return cuantos;
+}
+
 // 'desbloquea' es el inverso de 'requisitos'. Se recalcula entero cada vez que cambia el grafo,
 // para que no queden flechas colgando cuando alguien corrige un prerrequisito mal puesto.
 function recalcularDesbloquea(){
@@ -76,6 +113,103 @@ function recalcularDesbloquea(){
     (c[k].requisitos || []).forEach(req => { if (c[req]) c[req].desbloquea.push(k); });
   });
   invalidarCatalogo();
+}
+/* Cuantos ramos dependen de este, transitivamente, hasta el final de la carrera. Es la
+   ramificacion hacia delante: recorre el grafo de 'desbloquea' (lo que este ramo abre) sin
+   repetir nodos. Se usa para la "prioridad" de percepcion: un ramo que abre muchos es mas
+   critico. Solo cuenta los que estan EN la malla (en_malla !== false). */
+function ramosQueAbre(cod){
+  const c = CAT();
+  const visto = new Set([cod]);
+  const pila = (c[cod] && c[cod].desbloquea) ? c[cod].desbloquea.slice() : [];
+  while (pila.length) {
+    const k = pila.pop();
+    if (visto.has(k)) continue;
+    const r = c[k];
+    if (!r || r.en_malla === false) continue;
+    visto.add(k);
+    if (r.desbloquea) r.desbloquea.forEach(x => { if (!visto.has(x)) pila.push(x); });
+  }
+  return visto.size - 1;   // no se cuenta a si mismo
+}
+/* ---------------- asistencia de la pestana "Ramo" (2026-09-21) ----------------
+   Por ramo: peso del parcial (0..1), minimo de asistencia (%) y el estado por clase.
+   El estado de una clase vive en E.asistencia.clases[ramo][clave], con clave ramo|dia|franja. */
+function pesoParcialDe(cod){ return Number((E.asistencia && E.asistencia.pesoParcial || {})[cod] ?? 0.5); }
+function minimoDe(cod){ return Number((E.asistencia && E.asistencia.minimo || {})[cod] ?? 75); }
+function estadoClase(cod, clave){
+  const m = (E.asistencia && E.asistencia.clases || {})[cod] || {};
+  return m[clave] || null;   // 'presente' | 'parcial' | 'ausente' | 'na' | null (sin marcar)
+}
+function marcarClase(cod, clave, estado){
+  E.asistencia = E.asistencia || {pesoParcial:{}, minimo:{}, clases:{}};
+  E.asistencia.clases[cod] = E.asistencia.clases[cod] || {};
+  E.asistencia.clases[cod][clave] = estado;
+}
+/* El porcentaje de asistencia de un ramo: suma 1 por presente + peso por parcial, sobre el total
+   de clases validas (excluye las marcadas 'na'). Si no hay clases validas devuelve null. */
+function asistenciaDe(cod){
+  const clases = (E.asistencia && E.asistencia.clases || {})[cod] || {};
+  const valores = Object.values(clases);
+  const validas = valores.filter(v => v !== 'na');
+  if (!validas.length) return null;
+  const ganado = validas.reduce((s, v) =>
+    s + (v === 'presente' ? 1 : v === 'parcial' ? pesoParcialDe(cod) : 0), 0);
+  return {pct: Math.round(ganado / validas.length * 100), ganado, total: validas.length};
+}
+/* Cuantas clases puede faltar todavia (como ausente) sin caer bajo el minimo, en funcion del
+   total de clases validas. Negativo = ya esta bajo el minimo. */
+function puedeFaltar(cod){
+  const a = asistenciaDe(cod);
+  if (!a) return null;
+  const necesarias = Math.ceil(a.total * minimoDe(cod) / 100);
+  return a.total - necesarias;
+}
+/* ---------------- reglas de asistencia por ramo (bandas -> nota / efecto en eximicion) --------
+   Cada ramo puede definir reglas de asistencia propias. La regla tiene:
+     activa   : bool
+     peso     : cuanto pesa la "nota de asistencia" dentro de la presentacion (0..1, opcional)
+     bandas   : [{desde, hasta, nota}] rangos de % -> nota (ej >75% -> 7, 50..75 -> 4, bajo -> 1)
+     efecto   : 'exim' (rebaja el umbral de eximicion si cumple) | 'nota' (inyecta nota) | null
+   Las bandas se evaluan de arriba a abajo: la primera cuyo rango contiene el % gana.
+   Por defecto no hay regla (todo apagado), asi nada cambia para los ramos que no la usan. */
+function reglaAsistencia(cod){
+  const r = (E.asistencia && E.asistencia.reglas || {})[cod];
+  return Object.assign({activa:false, peso:0, bandas:[], efecto:null, umbral:75}, r || {});
+}
+function notaPorAsistencia(cod){
+  const r = reglaAsistencia(cod);
+  if (!r.activa) return null;
+  const a = asistenciaDe(cod);
+  if (!a) return null;                      // sin clases marcadas no hay % que evaluar
+  for (const b of (r.bandas || [])) {
+    const desde = Number(b.desde), hasta = Number(b.hasta);
+    if (a.pct >= desde && a.pct <= hasta) return {nota:Number(b.nota), banda:b, regla:r, pct:a.pct};
+  }
+  return null;                              // el % no cae en ninguna banda
+}
+function setReglaAsistencia(cod, regla){
+  E.asistencia = E.asistencia || {pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}};
+  E.asistencia.reglas = E.asistencia.reglas || {};
+  E.asistencia.reglas[cod] = regla;
+}
+/* ---------------- horario del ramo (bloques L-D, arrastrables y estirables) -------------------
+   E.asistencia.horario[cod] = [ {dia:0..6, franja:'10:00', duracion:90}, ... ].
+   La duracion default de un bloque nuevo es 90 min (1:30 h), el estandar universitario. */
+function horarioDe(cod){
+  return (E.asistencia && E.asistencia.horario || {})[cod] || [];
+}
+function agregarBloqueHorario(cod, bloque){
+  E.asistencia = E.asistencia || {pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}};
+  E.asistencia.horario = E.asistencia.horario || {};
+  E.asistencia.horario[cod] = E.asistencia.horario[cod] || [];
+  const b = Object.assign({dia:0, franja:'10:00', duracion:90}, bloque || {});
+  E.asistencia.horario[cod].push(b);
+  return b;
+}
+function borrarBloqueHorario(cod, i){
+  E.asistencia = E.asistencia || {pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}};
+  if (E.asistencia.horario && E.asistencia.horario[cod]) E.asistencia.horario[cod].splice(i, 1);
 }
 // Convierte la expresion canonical de prerrequisitos ("MA1001;FI2004|IQ2212") en las dos listas
 // que usa el resto de la aplicacion: 'requisitos' (todos, Y) y 'requisitos_o' (grupos donde basta
@@ -116,7 +250,14 @@ function ramoEnCatalogo(cod, datos){
   E.catalogo[cod] = Object.assign({
     nombre:cod, creditos:0, aprobacion:null, requisitos:[], desbloquea:[],
     en_malla:true, tipo:'obligatorio', requisitos_o:[],
-    dificultad:null, prioridad:null, descripcion:null, equivalente:null
+    dificultad:null, prioridad:null, descripcion:null, equivalente:null,
+    // ficha ampliada (2026-09-21): institucion, tramo y espacio, y la percepcion.
+    universidad:null, carrera:null,
+    tramo:'semestre',                       // 'semestre' | 'trimestre' | 'nivel'
+    espacio:null,                           // {tipo:'semestre'|'trimestre'|'semanas', cantidad:N} o null
+    equivalentes:[],                        // lista de {cod, origen:'misma'|'externa'} (amplia al viejo equivalente)
+    demanda_tiempo:null,                    // 1..5 (muy baja .. muy alta)
+    demanda_academica:null                  // 1..5 analogo
   }, E.catalogo[cod] || {}, datos, {nivel:n, semestre_num:n, semestre:String(n)});
   invalidarCatalogo();
   recalcularDesbloquea();
@@ -218,11 +359,26 @@ function estadoInicial(){
   // arrancar sin nada y esperar a que el usuario cree el primero.
   const e = {v:3, activo:D.semestres.length ? D.semestres[0].id : null,
              ajustes:{verHechasPorHacer:false, titulos:{modo:'envuelto', largo:12}}, extras:[],
-             sem:{}, agregados:{}, fuera:{}, aprobados:{},
+             sem:{}, agregados:{}, fuera:{}, aprobados:{}, secciones:[],
+             // Eventos PERSONALES del calendario (sin semestre): el estado "personal" es un
+             // estadoSemestre(SEM_VACIO) persistente, distinto de los semestres academicos. Asi,
+             // sin haber creado ningun semestre, los eventos, prioridades, hechas y notas viven
+             // en E.personal y no se pierden (est() solia devolver un objeto temporal descartable).
+             personal: estadoSemestre(SEM_VACIO),
+             // asistencia de la pestana "Ramo": por ramo, peso del parcial y minimo; las clases
+             // guardan su estado (presente/parcial/ausente/na) y la clave es ramo|dia|franja.
+             // reglas: por ramo, bandas de % -> nota y un efecto opcional sobre la eximicion.
+             // horario: por ramo, los bloques del horario L-D (arrastrables, estirables).
+             asistencia:{pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}},
              tiempo:{modo:'cronometro',
                              crono:{acumulado:0, corriendo:false, inicio:null},
                              temp:{objetivo:25, restante:0, corriendo:false, inicio:null},
-                             ramo:null, semana:null, dia:null}};
+                             ramo:null, semana:null, dia:null,
+                             pomodoro:{fase:'trabajo', restante:null, corriendo:false, inicio:null,
+                                       trabajos:0, racha:0, hoy:null,
+                                       config:{trabajo:25, corto:5, largo:15, cada:4}},
+                             recordatorios:[],        // {id,tipo:'una'|'prog',fecha,horas:[],dias:[],texto,sonido}
+                             recSonido:'propia'}};
   D.semestres.forEach(s => { e.sem[s.id] = estadoSemestre(s); });
   return e;
 }
@@ -239,6 +395,9 @@ function cargar(){
     e.agregados = s.agregados || {};
     e.fuera = s.fuera || {};
     e.aprobados = s.aprobados || {};
+    e.secciones = s.secciones || [];
+    e.personal = s.personal || estadoSemestre(SEM_VACIO);
+    e.asistencia = Object.assign({pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}}, s.asistencia || {});
     // OJO: aqui NO se puede llamar a semestres(): esa funcion lee la global E, que en este
     // momento se esta construyendo en 'let E = cargar()' y todavia no existe.
     D.semestres.concat(e.extras || []).forEach(sem => {

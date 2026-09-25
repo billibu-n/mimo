@@ -27,11 +27,14 @@ malla/01-importar.js
 ajustes/05-semestres.js
 malla/02-editor-ramos.js
 semestre/02-editor-evento.js
+semestre/03-calendario.js
 malla/03-dibujo.js
 malla/04-pdf.js
-malla/05-ficha.js
 malla/06-simulador.js
+tareas/01-tareas.js
 comun/07-select.js
 ajustes/06-actualizar.js
 ajustes/07-ical.js
 comun/06-arranque.js
+comun/08-barra.js
+ajustes/08-g2-puente.js

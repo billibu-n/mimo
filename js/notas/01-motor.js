@@ -64,6 +64,18 @@ function presentacion(cod, ex){
     if (p === null) return;
     sp += Number(c.peso) || 0; sn += (Number(c.peso) || 0) * p;
   });
+  // La "nota de asistencia" (si la regla de asistencia del ramo lo pide, con peso propio) entra
+  // como una categoria mas en la presentacion. Efecto 'nota' con peso > 0: la banda de % de
+  // asistencia aporta una nota ponderada. Sin regla activa, no cambia nada. El guard de typeof
+  // deja al motor autosuficiente: en un contexto sin catalogo (la prueba numerica) no existe y
+  // se salta, asi el calculo queda identico al de siempre.
+  if (typeof notaPorAsistencia === 'function') {
+    const na = notaPorAsistencia(cod);
+    if (na && na.regla.efecto === 'nota' && Number(na.regla.peso) > 0) {
+      const w = Number(na.regla.peso);
+      sp += w; sn += w * na.nota;
+    }
+  }
   return sp ? sn / sp : null;
 }
 function cumplenCondicion(cod, c, ex){
@@ -90,6 +102,15 @@ function estadoEximicion(cod, ex){
   let cumple = false;
   if (x.activa && detalle.length) {
     cumple = x.modo === 'alguna' ? detalle.some(d => d.ok) : detalle.every(d => d.ok);
+  }
+  // Efecto por asistencia: si la regla dice 'exim' y la banda de asistencia alcanza el umbral,
+  // el ramo se exime aunque las condiciones de nota no se cumplan. La asistencia "absuelve".
+  // Guard de typeof: en un contexto sin catalogo (prueba numerica) no existe y se salta.
+  if (typeof notaPorAsistencia === 'function') {
+    const na = notaPorAsistencia(cod);
+    if (na && na.regla.efecto === 'exim' && Number(na.nota) >= Number(na.regla.umbral || 0)) {
+      cumple = true;
+    }
   }
   return {activa:x.activa, modo:x.modo || 'todas', detalle:detalle, cumple:cumple, sinDatos:vacias.length > 0};
 }
@@ -159,5 +180,21 @@ function tipoPorCategoria(cat){
              certamen:'control', tarea:'tarea', laboratorio:'terreno', terreno:'terreno',
              prueba:'control', test:'control', quiz:'control', lectura:'tarea', informe:'entrega'};
   return m[singular] || 'tarea';
+}
+
+/* ---------------------------------------------------------- calendario -> notas (inversa)
+   La via que faltaba: cuando en el calendario das fecha a un evento CON ramo, esa fecha se refleja
+   en la evaluacion del mismo nombre (componente), igual que Notas ya reflejaba hacia el calendario.
+   El vinculo sigue siendo el NOMBRE compartido (componente.nombre === evento.texto); no se tocan
+   eventos ajenos (sin ramo, o sin un componente del mismo nombre). */
+function componenteDelEvento(ev){
+  if (!ev || !ev.ramo || !ev.texto) return null;
+  const c = compsDe(ev.ramo).find(x => x.nombre === ev.texto);
+  return c || null;
+}
+function sincronizarEventoAComponente(ev){
+  const c = componenteDelEvento(ev);
+  if (!c) return;
+  c.fecha = ev.fecha || null;
 }
 

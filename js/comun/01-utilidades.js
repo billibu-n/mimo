@@ -206,10 +206,6 @@ function resumirTitulo(texto){
 }
 function esc(t){ return String(t === null || t === undefined ? '' : t)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function mmss(ms){
-  const s = Math.floor(Math.abs(ms) / 1000);
-  return dos(Math.floor(s/3600)) + ':' + dos(Math.floor(s/60) % 60) + ':' + dos(s % 60);
-}
 
 /* redondeo del usuario: un decimal, media hacia arriba, con enteros en centesimas */
 function aCent(x){ return Math.round(Number(x) * 100); }

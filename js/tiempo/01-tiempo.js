@@ -1,4 +1,62 @@
 /* ---------------------------------------------------------------- tiempo */
+// ---- pomodoro -------------------------------------------------------------
+// Un modo mas de Tiempo: bloques de trabajo y descanso que se encadenan solos.
+// Reusa la misma alarma y el mismo estado E.tiempo; nada se repite. Al terminar
+// un bloque de trabajo, se registra una sesion de estudio en el ramo elegido
+// (igual que el cronometro), y cada N trabajos cae un descanso largo.
+function pomo(){
+  const p = E.tiempo.pomodoro || (E.tiempo.pomodoro = {fase:'trabajo', restante:null, corriendo:false,
+    inicio:null, trabajos:0, racha:0, hoy:null, config:{trabajo:25, corto:5, largo:15, cada:4}});
+  p.config = p.config || {trabajo:25, corto:5, largo:15, cada:4};
+  return p;
+}
+function pomoDur(fase){
+  const c = pomo().config;
+  return (fase === 'trabajo' ? c.trabajo : fase === 'descanso' ? c.corto : c.largo) * 60000;
+}
+function pomoRestanteMs(){
+  const p = pomo();
+  const base = p.restante != null ? p.restante : pomoDur(p.fase);
+  return Math.max(0, base - (p.corriendo && p.inicio ? Date.now() - p.inicio : 0));
+}
+function pomoFaseSig(){
+  const p = pomo();
+  if (p.fase !== 'trabajo') return 'trabajo';
+  // Se llama DESPUES de incrementar p.trabajos: si el numero de trabajos
+  // completados es multiplo de "cada", toca descanso largo.
+  const c = p.config;
+  return (p.trabajos % (c.cada || 4)) === 0 ? 'largo' : 'descanso';
+}
+function pomoTituloFase(fase){
+  return fase === 'trabajo' ? 'trabajo' : fase === 'descanso' ? 'descanso corto' : 'descanso largo';
+}
+
+/* La configuracion del pomodoro (trabajo, descanso corto, descanso largo, cada N). Sincroniza los
+   campos con E.tiempo.pomodoro.config y, al cambiarlos, guarda. No toca el ciclo en marcha: el
+   proximo bloque ya usa el valor nuevo. */
+function enlazarPomoConfig(){
+  const p = pomo();
+  const c = p.config;
+  const pares = [['pomo-trabajo','trabajo'], ['pomo-corto','corto'], ['pomo-largo','largo'], ['pomo-cada','cada']];
+  pares.forEach(par => {
+    const el = document.getElementById(par[0]);
+    if (!el) return;
+    // solo se pisa el valor si no coincide, para no perder el foco al escribir
+    if (Number(el.value) !== c[par[1]]) el.value = c[par[1]];
+    if (!el.__pomoArray) {
+      el.__pomoArray = true;
+      el.onchange = () => {
+        const v = Math.max(1, parseInt(el.value, 10) || 1);
+        c[par[1]] = v;
+        guardar('Pomodoro configurado');
+        // si no hay bloque en marcha, el reloj refleja la duracion nueva al instante
+        if (!p.corriendo) { p.restante = null; }
+        pintarReloj();
+      };
+    }
+  });
+}
+
 // Los 7 dias de la semana seleccionada (lunes..domingo), como fechas ISO.
 function diasDeLaSemana(lunes){
   const out = [];
@@ -22,6 +80,7 @@ function etiquetaDia(fecha){
 // para el temporizador es lo que queda por correr (baja). Cada uno usa SU estado, no se pisan.
 function tiempoActualMs(){
   const t = E.tiempo;
+  if (t.modo === 'pomodoro') return pomoRestanteMs();
   if (t.modo === 'temporizador'){
     const tp = t.temp || (t.temp = {objetivo:25, restante:null, corriendo:false, inicio:null});
     const base = tp.restante != null ? tp.restante : (tp.objetivo || 25) * 60000;
@@ -32,22 +91,70 @@ function tiempoActualMs(){
 }
 function estaCorriendo(){
   const t = E.tiempo;
+  if (t.modo === 'pomodoro') return !!pomo().corriendo;
   if (t.modo === 'temporizador') return !!(t.temp && t.temp.corriendo);
   return !!(t.crono && t.crono.corriendo);
 }
 function renderTiempo(){
   const t = E.tiempo;
   const ms = tiempoActualMs();
-  const reloj = document.getElementById('reloj');
+  const reloj = document.getElementById('crono-reloj');
   document.querySelectorAll('.modo').forEach(b => b.classList.toggle('on', b.dataset.modo === t.modo));
   pintarReloj();
   const obj = document.getElementById('crono-objetivo');
   const objetivo = (t.temp && t.temp.objetivo) || 25;
   if (obj && Number(obj.value) !== objetivo) obj.value = objetivo;
-  document.getElementById('crono-extra').innerHTML = t.modo === 'temporizador'
-    ? '<div class="destino">Cuenta atrás desde ' + objetivo + ' minutos. Al llegar a cero se detiene sola.</div>'
-    : '';
-  document.getElementById('crono-play').textContent = estaCorriendo() ? 'Pausar' : (ms > 0 ? 'Seguir' : 'Iniciar');
+  const extra = document.getElementById('crono-extra');
+  const recPanel = document.getElementById('rec-panel');
+  if (t.modo === 'recordatorios'){
+    if (recPanel) recPanel.hidden = false;
+    if (extra) extra.innerHTML = '';
+    const fObj = document.getElementById('crono-objetivo');
+    if (fObj && fObj.closest('.campo')) fObj.closest('.campo').style.display = 'none';
+    // en modo recordatorios el reloj no cuenta: se oculta el reloj y los controles play/pausa/parar
+    document.getElementById('crono-reloj').textContent = 'Recordatorios';
+    pintarRecordatorios();
+    enlazarRecordatorios();
+    // ocultar campos de ramo/semana/dia (no aplican a recordatorios)
+    ['crono-ramo','crono-semana','crono-dia'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.closest('.campo')) el.closest('.campo').style.display = 'none';
+    });
+    const controles = document.getElementById('crono-play') && document.getElementById('crono-play').closest('.controles');
+    if (controles) controles.style.display = 'none';
+    const sesiones = document.querySelector('.sesiones');
+    if (sesiones) sesiones.style.display = 'none';
+    return;
+  } else {
+    if (recPanel) recPanel.hidden = true;
+    const controles = document.getElementById('crono-play') && document.getElementById('crono-play').closest('.controles');
+    if (controles) controles.style.display = '';
+    const sesiones = document.querySelector('.sesiones');
+    if (sesiones) sesiones.style.display = '';
+    ['crono-ramo','crono-semana','crono-dia'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.closest('.campo')) el.closest('.campo').style.display = '';
+    });
+  }
+  if (t.modo === 'pomodoro'){
+    const p = pomo();
+    extra.innerHTML = '<div class="destino">' + esc(pomoTituloFase(p.fase)) +
+      ' · ' + p.trabajos + ' trabajo(s) hoy · racha ' + p.racha + '</div>';
+    const fObj = document.getElementById('crono-objetivo');
+    if (fObj && fObj.closest('.campo')) fObj.closest('.campo').style.display = 'none';
+    // la configuracion del pomodoro aparece solo aca
+    const pc = document.getElementById('pomo-config');
+    if (pc) { pc.hidden = false; enlazarPomoConfig(); }
+  } else {
+    const fObj = document.getElementById('crono-objetivo');
+    if (fObj && fObj.closest('.campo')) fObj.closest('.campo').style.display = '';
+    const pc = document.getElementById('pomo-config');
+    if (pc) pc.hidden = true;
+    extra.innerHTML = t.modo === 'temporizador'
+      ? '<div class="destino">Cuenta atrás desde ' + objetivo + ' minutos. Al llegar a cero se detiene sola.</div>'
+      : '';
+  }
+  pintarControles();
   const ramoSel = document.getElementById('crono-ramo'), semSel = document.getElementById('crono-semana'),
         diaSel = document.getElementById('crono-dia');
   const ramos = ramosH();
@@ -66,7 +173,7 @@ function renderTiempo(){
   // Sin semestre no hay semanas ni dias que elegir: se deja el hueco vacio y se avisa, sin romper.
   if (!semanas.length || !t.semana) {
     if (diaSel.options.length !== 0) diaSel.innerHTML = '';
-    document.getElementById('lista-sesiones').innerHTML =
+    document.getElementById('crono-sesiones').innerHTML =
       '<p class="ayuda">Crea un semestre para empezar a registrar tus sesiones.</p>';
     return;
   }
@@ -75,7 +182,8 @@ function renderTiempo(){
   if (diaSel.options.length !== dias.length) {
     diaSel.innerHTML = dias.map(f => '<option value="' + f + '">' + esc(etiquetaDia(f)) + '</option>').join('');
   }
-  // El dia por defecto es HOY si cae dentro de la semana; si no, el lunes.
+  // El dia por defecto es HOY si cae dentro de la semana; si no, el lunes. El valor efectivo se
+  // persiste en registrarMinutos() (cuando de verdad se registra) para no guardar a cada render.
   t.dia = t.dia && dias.includes(t.dia) ? t.dia : (dias.includes(hoy()) ? hoy() : dias[0]);
   diaSel.value = t.dia;
 
@@ -96,7 +204,7 @@ function renderTiempo(){
   });
   if (diaActual !== null) html += '<div class="sesion total"><span><b>Total ' + etiquetaDia(diaActual) +
     '</b></span><span class="h">' + fmtHM(totDia) + '</span></div>';
-  document.getElementById('lista-sesiones').innerHTML = html ||
+  document.getElementById('crono-sesiones').innerHTML = html ||
     '<p class="ayuda">Todavía no registras sesiones en esta semana.</p>';
   document.querySelectorAll('[data-sesion]').forEach(el => el.onclick = () => {
     const s = est();
@@ -115,30 +223,120 @@ function aliasDe(cod){
 }
 function cronoPlay(){
   const t = E.tiempo;
-  if (t.modo === 'temporizador'){
+  esconderAvisoRegistro();
+  if (t.modo === 'pomodoro'){
+    const p = pomo();
+    if (p.restante == null || p.restante <= 0) p.restante = pomoDur(p.fase);
+    p.corriendo = true; p.inicio = Date.now();
+  } else if (t.modo === 'temporizador'){
     const tp = t.temp;
-    if (tp.corriendo) {
-      // pausa: congela lo que queda
-      tp.restante = tiempoActualMs();
-      tp.corriendo = false; tp.inicio = null;
-    } else {
-      // si no hay restante guardado (recien iniciado o llego a cero), parte del objetivo
-      if (tp.restante == null || tp.restante <= 0) tp.restante = (tp.objetivo || 25) * 60000;
-      tp.corriendo = true; tp.inicio = Date.now();
-    }
+    // si no hay restante guardado (recien iniciado o llego a cero), parte del objetivo
+    if (tp.restante == null || tp.restante <= 0) tp.restante = (tp.objetivo || 25) * 60000;
+    tp.corriendo = true; tp.inicio = Date.now();
   } else {
     const c = t.crono;
-    if (c.corriendo) {
-      c.acumulado = tiempoActualMs();
-      c.corriendo = false; c.inicio = null;
-    } else {
-      c.corriendo = true; c.inicio = Date.now();
-    }
+    c.corriendo = true; c.inicio = Date.now();
   }
   guardar(); renderTiempo();
 }
+function cronoPausa(){
+  const t = E.tiempo;
+  if (t.modo === 'pomodoro'){
+    const p = pomo();
+    p.restante = pomoRestanteMs(); p.corriendo = false; p.inicio = null;
+  } else if (t.modo === 'temporizador'){
+    const tp = t.temp;
+    tp.restante = tiempoActualMs();
+    tp.corriendo = false; tp.inicio = null;
+  } else {
+    const c = t.crono;
+    c.acumulado = tiempoActualMs();
+    c.corriendo = false; c.inicio = null;
+  }
+  guardar(); renderTiempo();
+}
+// Parar: congela el tiempo y, si hay algo por registrar (>= 1 min), pregunta antes de
+// registrar o descartar. Aplica a los DOS modos: al cronometro no hay que olvidarlo, y al
+// temporizador igual se le pregunta si lo detuviste antes de llegar a cero.
+function cronoParar(){
+  const t = E.tiempo;
+  const min = minutosActuales();
+  if (t.modo === 'pomodoro'){
+    const p = pomo();
+    p.restante = null; p.corriendo = false; p.inicio = null;
+    guardar(); renderTiempo();
+    return;   // el pomodoro no pregunta por registro: se encadena solo
+  }
+  if (t.modo === 'temporizador'){
+    const tp = t.temp;
+    tp.restante = tiempoActualMs();
+    tp.corriendo = false; tp.inicio = null;
+  } else {
+    const c = t.crono;
+    c.acumulado = tiempoActualMs();
+    c.corriendo = false; c.inicio = null;
+  }
+  guardar(); renderTiempo();
+  if (min < 1) { mostrarAviso('Menos de un minuto: no hay nada que registrar'); return; }
+  mostrarAvisoRegistro(min);
+}
+// Cuantos minutos llego a correr el modo activo en este momento, redondeado.
+function minutosActuales(){
+  const t = E.tiempo;
+  if (t.modo === 'pomodoro') return 0;   // el pomodoro registra solo al completar una fase
+  if (t.modo === 'temporizador'){
+    const tp = t.temp;
+    const transcurrido = (tp.objetivo || 25) * 60000 - tiempoActualMs();
+    return Math.round(transcurrido / 60000);
+  }
+  return Math.round(tiempoActualMs() / 60000);
+}
+// Muestra el aviso "¿registrar estos X min?" con el ramo y los botones.
+function mostrarAvisoRegistro(min){
+  const t = E.tiempo;
+  const caja = document.getElementById('crono-aviso');
+  const texto = document.getElementById('crono-aviso-texto');
+  if (caja) caja.hidden = false;
+  if (texto) texto.textContent = '¿Registrar estos ' + min + ' min en ' + aliasDe(t.ramo) + '?';
+}
+function esconderAvisoRegistro(){
+  const caja = document.getElementById('crono-aviso');
+  if (caja) caja.hidden = true;
+}
+// El "Registrar" del aviso: guarda los minutos en la semana y cierra el aviso.
+function avisoRegistrarSi(){
+  const t = E.tiempo;
+  const min = minutosActuales();
+  esconderAvisoRegistro();
+  if (min < 1) return;
+  registrarMinutos(min);
+}
+// El "Descartar" del aviso: no registra; solo cierra el aviso y deja el reloj en cero.
+function avisoRegistrarNo(){
+  esconderAvisoRegistro();
+  cronoCero();
+}
+// Suma los minutos al ramo/dia/semana elegidos y crea la sesion (lo que antes hacia
+// cronoRegistrar con el boton "Registrar en la semana").
+function registrarMinutos(min){
+  const t = E.tiempo;
+  const s = est();
+  // El dia elegido es el que vale; si quedo fuera de la semana (por cambiar de semana sin tocar el
+  // dia), se reacomoda al lunes de la semana. Se persiste aqui, en el momento de registrar, para que
+  // la sesion quede en el dia exacto y no caiga a hoy/el lunes al recargar.
+  if (!t.dia || !diasDeLaSemana(t.semana).includes(t.dia)) t.dia = diasDeLaSemana(t.semana)[0];
+  s.minutos[t.semana] = s.minutos[t.semana] || {};
+  s.minutos[t.semana][t.ramo] = (Number(s.minutos[t.semana][t.ramo]) || 0) + min;
+  const d = new Date();
+  s.sesiones.push({id:'s' + Date.now(), fecha:t.dia, lunes:t.semana, ramo:t.ramo, minutos:min,
+                   hora:dos(d.getHours()) + ':' + dos(d.getMinutes())});
+  cronoCero();
+  guardar('Registrados ' + min + ' min en ' + aliasDe(t.ramo));
+  renderTodo(); renderTiempo();
+}
 function cronoCero(){
   const t = E.tiempo;
+  esconderAvisoRegistro();
   if (t.modo === 'temporizador'){
     t.temp.restante = (t.temp.objetivo || 25) * 60000;
     t.temp.corriendo = false; t.temp.inicio = null;
@@ -149,32 +347,16 @@ function cronoCero(){
   guardar(); renderTiempo();
 }
 function cronoRegistrar(){
+  // Se conserva por compatibilidad: registra lo que corrio de inmediato, sin aviso.
   const t = E.tiempo;
-  // El cronometro es el que mide estudio. El temporizador tambien puede registrar: lo que
-  // transcurrio desde su objetivo es el tiempo dedicado. Se registra lo que efectivamente corrio.
-  let min;
-  if (t.modo === 'temporizador'){
-    const tp = t.temp;
-    const transcurrido = (tp.objetivo || 25) * 60000 - tiempoActualMs();
-    min = Math.round(transcurrido / 60000);
-  } else {
-    min = Math.round(tiempoActualMs() / 60000);
-  }
+  const min = minutosActuales();
   if (min < 1) { mostrarAviso('Menos de un minuto: no hay nada que registrar'); return; }
-  const s = est();
-  s.minutos[t.semana] = s.minutos[t.semana] || {};
-  s.minutos[t.semana][t.ramo] = (Number(s.minutos[t.semana][t.ramo]) || 0) + min;
-  const d = new Date();
-  s.sesiones.push({id:'s' + Date.now(), fecha:t.dia || hoy(), lunes:t.semana, ramo:t.ramo, minutos:min,
-                   hora:dos(d.getHours()) + ':' + dos(d.getMinutes())});
-  cronoCero();
-  guardar('Registrados ' + min + ' min en ' + aliasDe(t.ramo));
-  renderTodo(); renderTiempo();
+  registrarMinutos(min);
 }
 function pintarReloj(){
   const t = E.tiempo;
   const ms = tiempoActualMs();
-  const reloj = document.getElementById('reloj');
+  const reloj = document.getElementById('crono-reloj');
   if (!reloj) return;
   // Reloj editable: se ve como texto, pero cada parte (hh, mm, ss) es un input.
   const h = Math.floor(ms / 3600000);
@@ -205,19 +387,54 @@ function pintarReloj(){
     }
     guardar('Tiempo ajustado a mano'); renderTiempo(); renderTodo();
   });
-  const b = document.getElementById('crono-play');
-  if (b) b.textContent = estaCorriendo() ? 'Pausar' : (ms > 0 ? 'Seguir' : 'Iniciar');
+  pintarControles();
+}
+// Habilita/deshabilita los tres controles segun el estado: corriendo -> Pausa y Parar activos,
+// Play apagado; detenido/pausado -> Play activo, Pausa y Parar apagados (salvo Parar si hay algo
+// que parar). Los botones tienen icono fijo, no cambian de texto.
+function pintarControles(){
+  const corriendo = estaCorriendo();
+  const play = document.getElementById('crono-play');
+  const pausa = document.getElementById('crono-pausa');
+  const parar = document.getElementById('crono-parar');
+  if (play) play.disabled = corriendo;
+  if (pausa) pausa.disabled = !corriendo;
+  if (parar) parar.disabled = !corriendo;
 }
 setInterval(() => {
   const t = E.tiempo;
+  // los recordatorios se revisan SIEMPRE, esten o no corriendo un cronometro: suenan por hora.
+  if (typeof revisarRecordatorios === 'function'){ try { revisarRecordatorios(); } catch(e){} }
   if (!estaCorriendo()) return;
+  if (t.modo === 'pomodoro'){
+    if (pomoRestanteMs() <= 0){
+      const p = pomo();
+      const faseTerminada = p.fase;
+      const hoyStr = hoy();
+      if (p.hoy !== hoyStr){ p.hoy = hoyStr; p.trabajos = 0; p.racha = 0; }
+      if (faseTerminada === 'trabajo'){
+        p.trabajos++;
+        p.racha++;
+        try { registrarMinutos(p.config.trabajo); } catch(e){}
+        guardar('Pomodoro: trabajo completado (' + p.config.trabajo + ' min)');
+      } else {
+        guardar('Pomodoro: descanso terminado');
+      }
+      p.fase = pomoFaseSig();
+      p.restante = null; p.corriendo = false; p.inicio = null;
+      alarmaTiempo();
+      renderTiempo();
+      return;
+    }
+  }
   if (t.modo === 'temporizador' && tiempoActualMs() <= 0) {
     t.temp.restante = 0; t.temp.corriendo = false; t.temp.inicio = null;
     guardar('Tiempo cumplido'); alarmaTiempo();
     renderTiempo();
     return;
   }
-  if (document.getElementById('p-tiempo').classList.contains('on')) pintarReloj();
+  if (document.querySelector('.seccion[data-seccion="tiempo"]') &&
+      !document.querySelector('.seccion[data-seccion="tiempo"]').hasAttribute('hidden')) pintarReloj();
 }, 500);
 
 /* Avisa que se cumplio el tiempo. Tres cosas a la vez, porque el alumno esta estudiando y no
@@ -253,4 +470,191 @@ function alarmaTiempo(){
       Notification.requestPermission();
     }
   } catch (e) { /* abriendo el archivo desde el disco, el navegador puede no dejar notificar */ }
+}
+
+/* ---- recordatorios (cuarto modo) -----------------------------------------
+   Recordatorios por hora: suenan solo si la app esta ABIERTA en ese momento.
+   Si estaba cerrada, se saltan sin aviso (no se acumulan). Tipos:
+   - 'una': hora + dia concreto, se borra tras sonar.
+   - 'prog': varias horas + dias marcados (L..D), suena cada dia marcado.
+   El sonido es configurable: propia (alarma.mp3), subida (archivo del usuario) o
+   del navegador (beep por Web Audio). Persistido en E.tiempo.recordatorios + recSonido. */
+
+function recordatorios(){
+  if (!Array.isArray(E.tiempo.recordatorios)) E.tiempo.recordatorios = [];
+  return E.tiempo.recordatorios;
+}
+
+function recHoyISO(){ return hoy(); }
+
+function pintarRecordatorios(){
+  const lista = document.getElementById('rec-lista');
+  const recs = recordatorios();
+  if (!lista) return;
+  if (!recs.length){
+    lista.innerHTML = '<p class="ayuda">Todavía no hay recordatorios. Agrega uno arriba.</p>';
+    return;
+  }
+  lista.innerHTML = recs.map(r => {
+    let detalle;
+    if (r.tipo === 'una'){
+      detalle = 'una vez · ' + etiquetaDia(r.fecha);
+    } else {
+      const nombres = ['L','M','X','J','V','S','D'];
+      const dias = (r.dias || []).map(d => nombres[d]).join(' ');
+      detalle = 'programado · ' + (r.horas || []).join(', ') + ' · ' + dias;
+    }
+    const sonido = r.sonido === 'sistema' ? 'sonido del navegador'
+      : r.sonido === 'subida' ? 'timbre propio' : 'alarma de mimo';
+    return '<div class="rec-item">' +
+      '<span class="rec-hora">' + esc((r.horas || []).join(', ') || r.hora) + '</span>' +
+      '<span class="rec-txt">' + esc(r.texto) + '</span>' +
+      '<span class="rec-det">' + detalle + ' · ' + sonido + '</span>' +
+      '<button class="quitar rec-quitar" data-rec="' + r.id + '">×</button></div>';
+  }).join('');
+  document.querySelectorAll('[data-rec]').forEach(el => el.onclick = () => {
+    const recs = recordatorios();
+    const i = recs.findIndex(x => String(x.id) === el.dataset.rec);
+    if (i < 0) return;
+    recs.splice(i, 1);
+    guardar('Recordatorio quitado'); pintarRecordatorios();
+  });
+}
+
+function agregarRecordatorio(){
+  const tipo = document.getElementById('rec-tipo-una').classList.contains('on') ? 'una' : 'prog';
+  const texto = (document.getElementById('rec-texto').value || '').trim();
+  const horasRaw = (document.getElementById('rec-horas').value || '').trim();
+  if (!texto){ mostrarAviso('Escribe qué quieres recordar'); return; }
+  if (!horasRaw){ mostrarAviso('Escribe al menos una hora (ej. 22:00)'); return; }
+  const horas = horasRaw.split(',').map(h => h.trim()).filter(h => /^\d{1,2}:\d{2}$/.test(h))
+    .map(h => { const [hh,mm] = h.split(':'); return String(hh).padStart(2,'0') + ':' + mm; });
+  if (!horas.length){ mostrarAviso('La hora debe tener el formato HH:MM'); return; }
+  const sonido = E.tiempo.recSonido || 'propia';
+  let r = { id: Date.now(), tipo: tipo, horas: horas, texto: texto, sonido: sonido };
+  if (tipo === 'una'){
+    const fecha = document.getElementById('rec-fecha').value;
+    if (!fecha){ mostrarAviso('Elige el día para "una vez"'); return; }
+    r.fecha = fecha;
+    r.dias = [];
+  } else {
+    r.dias = Array.from(document.querySelectorAll('.rec-dia.on')).map(b => parseInt(b.dataset.dia, 10));
+    if (!r.dias.length){ mostrarAviso('Marca al menos un día'); return; }
+    r.fecha = null;
+  }
+  recordatorios().push(r);
+  guardar('Recordatorio agregado');
+  pintarRecordatorios();
+  // limpiar solo el texto, dejar horas para repetir
+  document.getElementById('rec-texto').value = '';
+}
+
+function enlazarRecordatorios(){
+  document.querySelectorAll('.rec-tipo-btn').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.rec-tipo-btn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    const esUna = b.dataset.tipo === 'una';
+    document.getElementById('rec-campo-fecha').style.display = esUna ? '' : 'none';
+    document.getElementById('rec-campo-dias').style.display = esUna ? 'none' : '';
+  });
+  document.querySelectorAll('.rec-dia').forEach(b => b.onclick = () => b.classList.toggle('on'));
+  const agr = document.getElementById('rec-agregar');
+  if (agr) agr.onclick = agregarRecordatorio;
+
+  // Sonido: tres botones en vez del select. El elegido se marca y el valor se guarda en E.tiempo.recSonido.
+  let sonActual = E.tiempo.recSonido || 'propia';
+  const pintarSon = () => {
+    document.querySelectorAll('.rec-son-btn').forEach(b => b.classList.toggle('on', b.dataset.sonido === sonActual));
+    const campoArchivo = document.getElementById('rec-campo-archivo');
+    if (campoArchivo) campoArchivo.hidden = sonActual !== 'subida';
+  };
+  document.querySelectorAll('.rec-son-btn').forEach(b => b.onclick = () => {
+    sonActual = b.dataset.sonido;
+    E.tiempo.recSonido = sonActual;
+    guardar('Sonido del aviso cambiado'); pintarSon();
+  });
+
+  // El boton circular de doble corchea abre el selector de archivo nativo (oculto).
+  const bt = document.getElementById('rec-bitacora');
+  const arch = document.getElementById('rec-archivo');
+  if (bt && arch) bt.onclick = () => arch.click();
+  if (arch) arch.onchange = () => {
+    if (arch.files && arch.files[0]){
+      const f = arch.files[0];
+      const url = URL.createObjectURL(f);
+      E.tiempo.recTimbre = url;
+      guardar('Timbre propio guardado');
+      const nom = document.getElementById('rec-archivo-nom');
+      if (nom) nom.textContent = f.name;
+    }
+  };
+  pintarSon();
+}
+
+function revisarRecordatorios(){
+  const recs = recordatorios();
+  if (!recs.length) return;
+  const ahora = new Date();
+  const hhmm = String(ahora.getHours()).padStart(2,'0') + ':' + String(ahora.getMinutes()).padStart(2,'0');
+  // los recordatorios 'una' comparan su fecha con la de HOY; los 'prog' con el dia de la semana.
+  const hoyISO = recHoyISO();
+  const diaSemana = ahora.getDay(); // 0=Domingo .. 6=Sabado
+  const aSonar = [];
+  const aBorrar = [];
+  recs.forEach(r => {
+    let toca = false;
+    if (r.tipo === 'una'){
+      if (r.fecha === hoyISO && (r.horas || []).includes(hhmm)) toca = true;
+    } else {
+      if ((r.dias || []).includes(diaSemana) && (r.horas || []).includes(hhmm)) toca = true;
+    }
+    if (toca){
+      // evitar sonar dos veces el mismo minuto para el mismo recordatorio
+      if (r._sono === hoyISO + hhmm) return;
+      r._sono = hoyISO + hhmm;
+      aSonar.push(r);
+      if (r.tipo === 'una') aBorrar.push(r.id);
+    }
+  });
+  aSonar.forEach(r => sonarRecordatorio(r));
+  if (aBorrar.length){
+    const ids = aBorrar;
+    E.tiempo.recordatorios = recordatorios().filter(r => !ids.includes(r.id));
+    guardar('Recordatorio cumplido');
+    pintarRecordatorios();
+  }
+}
+
+function sonarRecordatorio(r){
+  mostrarAviso('Recordatorio: ' + r.texto);
+  if (E.ajustes && E.ajustes.sonido === false) return;
+  const fuente = r.sonido || E.tiempo.recSonido || 'propia';
+  try {
+    if (fuente === 'sistema'){
+      // beep por Web Audio: no depende de ningun archivo
+      const ctx = (window.__recCtx = window.__recCtx || (window.AudioContext && new AudioContext()));
+      if (ctx){
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = 880; g.gain.value = 0.4;
+        o.start(); o.stop(ctx.currentTime + 0.6);
+      }
+    } else if (fuente === 'subida' && E.tiempo.recTimbre){
+      const a = document.getElementById('audio-rec-subida') || (() => {
+        const el = document.createElement('audio'); el.id = 'audio-rec-subida';
+        document.body.appendChild(el); return el;
+      })();
+      a.src = E.tiempo.recTimbre; a.currentTime = 0;
+      const p = a.play(); if (p && p.catch) p.catch(() => {});
+    } else {
+      // propia: reuse alarmaTiempo (mismo <audio> alarma.mp3), pero sin pisar su mensaje fijo
+      let a = document.getElementById('audio-alarma');
+      if (!a){
+        a = document.createElement('audio'); a.id = 'audio-alarma';
+        a.src = 'sonido/alarma.mp3'; a.preload = 'auto'; document.body.appendChild(a);
+      }
+      a.currentTime = 0;
+      const p = a.play(); if (p && p.catch) p.catch(() => {});
+    }
+  } catch(e){ /* si no puede sonar, queda el aviso en pantalla */ }
 }

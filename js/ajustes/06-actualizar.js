@@ -8,13 +8,18 @@
    con `access-control-allow-origin: *`. */
 
 // Donde vive el proyecto en GitHub y de donde se saca la version mas nueva.
-const REPO_ACT = {user:'billibu-n', repo:'mimo', versionLocal:'1.0.2'};
+function versionLocal(){
+  // La version local la escribe el armador en #datos-version[data-local]; si no
+  // existe (o no coincide con el formato x.y.z), se cae a un valor seguro.
+  const el = document.getElementById('datos-version');
+  const v = el && el.getAttribute('data-local');
+  return (v && /^\d+\.\d+\.\d+/.test(v)) ? v : '1.0.0';
+}
+const REPO_ACT = {user:'billibu-n', repo:'mimo'};
 
 function pintarActualizacion(estado, texto){
   const caja = document.getElementById('caja-actualizar');
-  if (!caja) return;
-  caja.textContent = texto || '';
-  caja.className = 'aviso-act ' + (estado || '');
+  if (caja){ caja.textContent = texto || ''; caja.className = 'aviso-act ' + (estado || ''); }
 }
 
 function compararVersiones(a, b){
@@ -40,16 +45,19 @@ async function buscarActualizacion(){
     if (!r.ok) throw new Error('http ' + r.status);
     remota = await r.json();
   } catch (err) {
+    pintarTagVersion('mal', 'v' + versionLocal());
     pintarActualizacion('mal', 'No se pudo consultar (¿sin internet?). Revisa ' +
       'https://github.com/' + REPO_ACT.user + '/' + REPO_ACT.repo + '/releases');
     return;
   }
   if (!remota || typeof remota.version !== 'string'){
+    pintarTagVersion('mal', 'v' + versionLocal());
     pintarActualizacion('mal', 'No se encontró la versión en GitHub.');
     return;
   }
-  const local = REPO_ACT.versionLocal;
+  const local = versionLocal();
   const cmp = compararVersiones(remota.version, local);
+  pintarTagVersion(cmp > 0 ? 'nueva' : (cmp < 0 ? 'al-dia' : 'al-dia'), 'v' + local, cmp);
   if (cmp > 0){
     pintarActualizacion('ok', 'Hay una versión más nueva: v' + remota.version +
       ' (tienes v' + local + ').');
@@ -64,3 +72,23 @@ async function buscarActualizacion(){
     pintarActualizacion('ok', 'Estás al día (v' + local + ').');
   }
 }
+
+/* El tag de version del header, junto a "Mimo Achademics". Muestra la version local y, al
+   pulsarlo, comprueba contra GitHub. Fuera del recuadro de Ajustes, como pide la propuesta. */
+function pintarTagVersion(estado, version){
+  const el = document.getElementById('bv-tag');
+  if (!el) return;
+  el.textContent = version || ('v' + versionLocal());
+  el.className = 'tag-version' + (estado ? ' ' + estado : '');
+  el.title = estado === 'mal'
+    ? 'No se pudo comprobar (¿sin internet?). Pulsa para reintentar.'
+    : (estado === 'nueva'
+      ? 'Hay una versión más nueva. Pulsa para comprobar otra vez.'
+      : 'Al día (' + (version || 'v' + versionLocal()) + '). Pulsa para comprobar.');
+}
+(function iniciarTagVersion(){
+  const el = document.getElementById('bv-tag');
+  if (!el) return;
+  pintarTagVersion('', 'v' + versionLocal());
+  el.onclick = () => buscarActualizacion();
+})();

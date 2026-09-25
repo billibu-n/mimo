@@ -18,7 +18,7 @@ body.tema-medianoche{
   --r-sm:6px; --r-md:9px; --r-lg:14px;
   --foco:0 0 0 2px #1e1f20, 0 0 0 4px #8ab4f8;
   --t:.12s; --curva:cubic-bezier(.4,0,.2,1);
-  --muted2:#bdc1c6; --ac-txt:#202124;
+  --muted2:#bdc1c6; --ac-txt:#202124; --ac-txt-fuerte:#ffffff;
   --info-bg:#1f2b3d; --hoy-bg:#1f2b3d;
   --pill-ok-bg:#0f2a1c; --pill-ok-fg:#81c995;
   --pill-warn-bg:#3a2f14; --pill-warn-fg:#fdd663;

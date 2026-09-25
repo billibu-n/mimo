@@ -112,6 +112,7 @@ function leerMalla(texto, nombreArchivo){
     if (!Array.isArray(lista)) {
       throw new Error('El JSON no trae una lista de ramos (se esperaba "ramos": [...]).');
     }
+    const seccionesDePaquete = (!Array.isArray(j) && Array.isArray(j.secciones)) ? j.secciones : null;
     filas = lista.map(r => {
       // Si el JSON trae 'requisitos' como texto ("MA1001;FI2004|IQ2212"), se parsea con la
       // notacion canonical. Si lo trae como lista (la forma vieja) se respeta tal cual.
@@ -127,6 +128,7 @@ function leerMalla(texto, nombreArchivo){
         requisitos_o: reqParsed ? reqParsed.requisitos_o : (r.requisitos_o || []),
         tipo: r.tipo || 'obligatorio',
         anual: r.anual === undefined ? r.annual : r.anual,
+        seccion: (r.seccion !== undefined && r.seccion !== null) ? Number(r.seccion) : null,
         aprobacion: r.aprobacion,
         dificultad: r.dificultad,
         equivalente: r.equivalente,
@@ -134,6 +136,9 @@ function leerMalla(texto, nombreArchivo){
         descripcion: r.descripcion
       };
     });
+    // El paquete exportado trae 'secciones' (nombre/sigla/color/niveles). Se guardan para
+    // cargarMalla, que las repone en E.secciones cuando vienen.
+    if (seccionesDePaquete !== null) filas.__secciones = seccionesDePaquete;
   } else {
     const lineas = bruto.replace(/\r/g, '').split('\n').filter(l => l.trim());
     if (!lineas.length) throw new Error('El archivo no tiene ninguna línea con datos.');
@@ -196,6 +201,7 @@ function leerMalla(texto, nombreArchivo){
   }
 
   // limpieza y revision: nada entra a la malla sin codigo y sin nombre
+  const seccionesImportadas = filas.__secciones || null;
   const buenos = [], problemas = [], vistos = {};
   filas.forEach((f, i) => {
     f.codigo = String(f.codigo || '').trim().toUpperCase();
@@ -227,11 +233,18 @@ function leerMalla(texto, nombreArchivo){
   buenos.forEach(f => f.requisitos.forEach(r => {
     if (!tiene[r] && !CAT()[r] && huerfanos.indexOf(r) < 0) huerfanos.push(r);
   }));
-  return {ramos: buenos, problemas: problemas, huerfanos: huerfanos};
+  return {ramos: buenos, problemas: problemas, huerfanos: huerfanos, secciones: seccionesImportadas};
 }
 // Mete los ramos leidos en el catalogo del usuario, respetando lo que ya existia.
 function cargarMalla(leido){
   const puestos = {nuevos: 0, actualizados: 0};
+  // Si el paquete traia secciones, se reponen ANTES de meter los ramos: el campo 'seccion' de cada
+  // ramo apunta por indice a E.secciones, asi que tienen que entrar juntas y en el mismo orden.
+  if (Array.isArray(leido.secciones) && leido.secciones.length) {
+    E.secciones = leido.secciones.map(s => ({
+      nombre: s.nombre || '', sigla: (s.sigla || '').slice(0, 3), color: s.color || '#2563eb', niveles: s.niveles || []
+    }));
+  }
   leido.ramos.forEach(f => {
     const ya = !!CAT()[f.codigo];
       // Los campos nuevos (requisitos_o, aprobacion, dificultad, prioridad, descripcion) se
@@ -244,6 +257,7 @@ function cargarMalla(leido){
       if (f.dificultad) datos.dificultad = f.dificultad;
       if (f.prioridad) datos.prioridad = f.prioridad;
       if (f.descripcion) datos.descripcion = f.descripcion;
+      if (f.seccion !== undefined && f.seccion !== null) datos.seccion = Number(f.seccion);
       ramoEnCatalogo(f.codigo, datos);
     if (ya) puestos.actualizados++; else puestos.nuevos++;
   });

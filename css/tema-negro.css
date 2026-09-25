@@ -17,7 +17,7 @@ body.tema-negro{
   --r-sm:6px; --r-md:9px; --r-lg:14px;
   --foco:0 0 0 2px #2e2e2e, 0 0 0 4px #3584e4;
   --t:.12s; --curva:cubic-bezier(.4,0,.2,1);
-  --muted2:#c0bfbc; --ac-txt:#ffffff;
+  --muted2:#c0bfbc; --ac-txt:#ffffff; --ac-txt-fuerte:#ffffff;
   --info-bg:#1c2a3a; --hoy-bg:#1c2a3a;
   --pill-ok-bg:#0e2e1e; --pill-ok-fg:#8ff0a4;
   --pill-warn-bg:#3a2c0f; --pill-warn-fg:#f6d32d;

@@ -1,6 +1,6 @@
 /* ---------------------------------------------------------------- arranque */
 function pintarFiltros(){
-  const fr = document.getElementById('f-ramos');
+  const fr = document.getElementById('cl-ramos');
   fr.innerHTML = ramosBase().map(r =>
     '<label><input type="checkbox"' + (ramosFiltro.has(r.codigo) ? ' checked' : '') + ' data-ramo="' + r.codigo + '">' +
     '<i class="cuadro" style="background:' + colorDe(r.codigo) + '"></i>' + esc(r.alias) + '</label>').join('');
@@ -8,18 +8,24 @@ function pintarFiltros(){
     i.checked ? ramosFiltro.add(i.dataset.ramo) : ramosFiltro.delete(i.dataset.ramo);
     renderSemestre();
   });
-  // El filtro por tipo de evento ya no tiene recuadro en pantalla, asi que se deja siempre
-  // completo: asi el calendario sigue mostrando todos los eventos.
-  const ft = document.getElementById('f-tipos');
+  // El filtro por tipo de evento ahora tiene recuadro visible: la seccion "Eventos" de la barra
+  // lateral, abajo de "Ramos". Ahi vive el catalogo propio del usuario (cumpleanos, personales,
+  // etc.): cada tipo es una casilla que muestra u esconde sus eventos en el calendario.
+  const ft = document.getElementById('cl-eventos');
+  const tipos = tiposDe();
   if (ft) {
-    const tipos = tiposDe();
-    ft.innerHTML = Object.keys(tipos).map(t =>
-      '<label><input type="checkbox"' + (tiposFiltro.has(t) ? ' checked' : '') + ' data-tipo="' + t + '">' +
-      esc(tipos[t].toLowerCase()) + '</label>').join('');
-    ft.querySelectorAll('input').forEach(i => i.onchange = () => {
-      i.checked ? tiposFiltro.add(i.dataset.tipo) : tiposFiltro.delete(i.dataset.tipo);
-      renderSemestre();
-    });
+    if (!Object.keys(tipos).length) {
+      ft.innerHTML = '<p class="ayuda">Cuando crees un evento sin ramo y le pongas un tipo ' +
+        '(ej. "Cumpleaños"), aparecerá aquí para filtrarlo.</p>';
+    } else {
+      ft.innerHTML = Object.keys(tipos).map(t =>
+        '<label><input type="checkbox"' + (tiposFiltro.has(t) ? ' checked' : '') + ' data-tipo="' + t + '">' +
+        esc(tipos[t]) + '</label>').join('');
+      ft.querySelectorAll('input').forEach(i => i.onchange = () => {
+        i.checked ? tiposFiltro.add(i.dataset.tipo) : tiposFiltro.delete(i.dataset.tipo);
+        renderSemestre();
+      });
+    }
   }
 }
 function arranque(){
@@ -38,14 +44,89 @@ function arranque(){
   renderAjustes(); renderTiempo(); renderMalla();
   estilizarSelects(document);
 }
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
-  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + t.dataset.panel));
-  if (t.dataset.panel === 'tiempo') renderTiempo();
-  if (t.dataset.panel === 'estudio') renderPuntos();
-  if (t.dataset.panel === 'malla') { memoEstados = null; renderMalla(); }
+// Navegación entre secciones: el motor del marco G1 (el que venía del prototipo
+// salida/panel/g1-navegacion.js). Las seis secciones viven dentro del mismo
+// index.html como <section class="seccion" data-seccion="...">, y esta es la
+// función que muestra una y esconde el resto. Se usa el atributo data-seccion y
+// no el texto del botón: el botón lleva el icono adentro y el texto depende del
+// idioma. El dato, no.
+const SECCIONES = ['calendario', 'estudio', 'malla', 'notas', 'tiempo', 'tareas', 'ajustes'];
+const CLAVE_SECCION = 'mimo-seccion-actual';
+const cuerpos = SECCIONES.map(s => document.querySelector('.seccion[data-seccion="' + s + '"]')).filter(Boolean);
+const navs = document.querySelectorAll('.nav');
+
+function mostrarSeccion(nombre, guardar) {
+  // Una sola visible; las demás llevan el atributo hidden (que respeta la
+  // accesibilidad, a diferencia de display:none directo) y pierden .on.
+  cuerpos.forEach(c => {
+    const suya = c.getAttribute('data-seccion') === nombre;
+    if (suya) { c.removeAttribute('hidden'); c.classList.add('on'); }
+    else { c.setAttribute('hidden', ''); c.classList.remove('on'); }
+  });
+  navs.forEach(n => n.classList.toggle('on', n.getAttribute('data-seccion') === nombre));
+  if (guardar) { try { localStorage.setItem(CLAVE_SECCION, nombre); } catch (e) {} }
+  // Las secciones que dibujan al aparecer (malla, tiempo, estudio) se enteran:
+  // medir un elemento oculto da 0 y el dibujo sale mal. Se conserva la lógica
+  // de render que ya tenía mimo, disparada por este evento en vez de por el
+  // clic directo en cada pestaña.
+  if (nombre === 'tiempo') renderTiempo();
+  if (nombre === 'estudio') renderPuntos();
+  if (nombre === 'malla') { memoEstados = null; renderMalla(); }
+  if (nombre === 'tareas') renderTareas();
+  try { document.dispatchEvent(new CustomEvent('mimo:seccion', { detail: { seccion: nombre } })); } catch (e) {}
+}
+
+navs.forEach(n => {
+  n.addEventListener('click', () => {
+    const sec = n.getAttribute('data-seccion');
+    if (sec && SECCIONES.indexOf(sec) !== -1) mostrarSeccion(sec, true);
+  });
 });
-const botonesVista = {todo:'v-todo', prox:'v-prox', pend:'v-pend'};
+
+// El orden de los apartados lo decide el usuario: arrastra el boton en la barra y se guarda.
+// El orden vive en el DOM (appendChild mueve el boton), no en SECCIONES: asi el motor de arriba
+// no tiene que cambiar. SECCIONES sigue siendo la lista valida de secciones.
+const CLAVE_ORDEN = 'mimo-orden-secciones';
+let navArrastrado = null;
+function ordenNavs(){
+  return [].slice.call(document.querySelectorAll('.navs .nav')).map(n => n.getAttribute('data-seccion'));
+}
+function aplicarOrdenNavs(){
+  try {
+    const g = JSON.parse(localStorage.getItem(CLAVE_ORDEN) || 'null');
+    if (!Array.isArray(g)) return;
+    const caja = document.querySelector('.navs');
+    if (!caja) return;
+    g.forEach(sec => {
+      const b = caja.querySelector('.nav[data-seccion="' + sec + '"]');
+      if (b && SECCIONES.indexOf(sec) !== -1) caja.appendChild(b);
+    });
+  } catch (e) {}
+}
+function guardarOrdenNavs(){ try { localStorage.setItem(CLAVE_ORDEN, JSON.stringify(ordenNavs())); } catch (e) {} }
+navs.forEach(n => {
+  n.setAttribute('draggable', 'true');
+  n.addEventListener('dragstart', e => { navArrastrado = n; e.dataTransfer.effectAllowed = 'move'; });
+  n.addEventListener('dragover', e => {
+    if (!navArrastrado || navArrastrado === n) return;
+    e.preventDefault();
+    const caja = n.parentNode, r = n.getBoundingClientRect();
+    if (e.clientY < r.top + r.height / 2) caja.insertBefore(navArrastrado, n);
+    else caja.insertBefore(navArrastrado, n.nextSibling);
+  });
+  n.addEventListener('drop', e => { e.preventDefault(); guardarOrdenNavs(); });
+  n.addEventListener('dragend', () => { navArrastrado = null; guardarOrdenNavs(); });
+});
+
+// Al abrir, vuelve a donde quedó el alumno; si es la primera vez o el valor no
+// sirve, arranca en la primera: nunca en blanco.
+{
+  let inicial = SECCIONES[0];
+  try { const g = localStorage.getItem(CLAVE_SECCION); if (g && SECCIONES.indexOf(g) !== -1) inicial = g; } catch (e) {}
+  mostrarSeccion(inicial, false);
+  aplicarOrdenNavs();
+}
+const botonesVista = {todo:'cl-ver-todo', prox:'cl-ver-prox', pend:'cl-ver-pend'};
 Object.keys(botonesVista).forEach(k => {
   const btn = document.getElementById(botonesVista[k]);
   btn.onclick = () => {
@@ -69,16 +150,16 @@ document.getElementById('malla-reordenar').onclick = modalReordenarMalla;
 document.getElementById('malla-exportar').onclick = exportarMalla;
 document.getElementById('malla-simular').onclick = modalSimular;
 document.getElementById('malla-importar').onclick = modalImportarMalla;
-document.getElementById('nueva-tarea').onclick = nuevaTarea;
+document.getElementById('cl-nuevo').onclick = nuevaTarea;
 document.getElementById('btn-nuevo-sem').onclick = modalNuevoSemestre;
 document.getElementById('btn-edit-sem').onclick = modalEditarSemestre;
 document.getElementById('btn-borrar-sem').onclick = borrarSemestre;
 document.getElementById('modal').onclick = ev => { if (ev.target.id === 'modal') cerrarEditor(); };
-document.getElementById('meta-semanal').oninput = ev => {
+document.getElementById('es-meta').oninput = ev => {
   est().metas.semanal = Number(ev.target.value) || 0;
   guardar(); renderEstudio(); renderSemestre(); renderPuntos();
 };
-document.getElementById('meta-maxima').onchange = ev => {
+document.getElementById('es-meta-max').onchange = ev => {
   E.usarMetaMaxima = ev.target.checked;
   guardar('Meta cambiada a ' + (ev.target.checked ? 'máximo histórico' : 'número fijo'));
   renderEstudio(); renderSemestre(); renderPuntos();
@@ -87,8 +168,10 @@ document.getElementById('aj-ver-hechas').onchange = ev => {
   E.ajustes.verHechasPorHacer = ev.target.checked; guardar(); renderSemestre();
 };
 document.getElementById('crono-play').onclick = cronoPlay;
-document.getElementById('crono-cero').onclick = cronoCero;
-document.getElementById('crono-registrar').onclick = cronoRegistrar;
+document.getElementById('crono-pausa').onclick = cronoPausa;
+document.getElementById('crono-parar').onclick = cronoParar;
+document.getElementById('crono-aviso-si').onclick = avisoRegistrarSi;
+document.getElementById('crono-aviso-no').onclick = avisoRegistrarNo;
 document.getElementById('crono-ramo').onchange = ev => { E.tiempo.ramo = ev.target.value; guardar(); };
 document.getElementById('crono-semana').onchange = ev => {
   E.tiempo.semana = ev.target.value;
@@ -100,9 +183,9 @@ document.getElementById('crono-objetivo').onchange = ev => {
   E.tiempo.objetivo = Math.max(1, Math.min(600, Number(ev.target.value) || 25));
   guardar(); renderTiempo();
 };
-document.querySelectorAll('.modo').forEach(b => b.onclick = () => {
+document.querySelectorAll('.seccion[data-seccion="tiempo"] .modo').forEach(b => b.onclick = () => {
   E.tiempo.modo = b.dataset.modo;
-  document.querySelectorAll('.modo').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.seccion[data-seccion="tiempo"] .modo').forEach(x => x.classList.toggle('on', x === b));
   guardar(); renderTiempo();
 });
 // El respaldo AUTOSUFICIENTE, en el formato 2 (el canonico desde la version 1.0.1). Trae la capa
@@ -147,6 +230,9 @@ function restaurarTipos(datos){
   (datos && datos.semestres || []).forEach(sem => (sem.eventos || []).forEach(cadaEvento));
   (E.extras || []).forEach(sem => (sem.eventos || []).forEach(cadaEvento));
   Object.values(E.sem || {}).forEach(s => (s.eventos || []).forEach(cadaEvento));
+  // Los eventos personales (sin semestre) tambien definen tipos en uso.
+  (E.personal && E.personal.nuevas || []).forEach(cadaEvento);
+  (E.eventos || []).forEach(cadaEvento);
   const era = Object.keys(E.tipos || {}).length;
   E.tipos = E.tipos || {};
   Object.keys(usados).forEach(t => {
@@ -197,6 +283,12 @@ document.getElementById('archivo').onchange = ev => {
       if (datos.formato === 2 && datos.estado && typeof datos.estado === 'object') {
         // 1. el estado del usuario
         E = Object.assign(estadoInicial(), datos.estado);
+        // Fusion PROFUNDA de las capas que crecieron entre versiones: igual que cargar(). Asi un
+        // respaldo de la 1.0.2 (sin recordatorios, sin pomodoro, sin av.barra) no borra esos campos
+        // nuevos; quedan con su valor de fabrica y el usuario solo llena lo que le falte.
+        E.ajustes = Object.assign(estadoInicial().ajustes, datos.estado.ajustes || {});
+        E.tiempo = Object.assign(estadoInicial().tiempo, datos.estado.tiempo || {});
+        E.asistencia = Object.assign({pesoParcial:{}, minimo:{}, clases:{}, reglas:{}, horario:{}}, datos.estado.asistencia || {});
         migrarTiempo(E);   // pone el tiempo viejo (raiz) en crono/temp, si el respaldo es anterior
         // 2. la malla (catalogo y niveles) que el respaldo traiga: entra por E.catalogo, porque
         //    D es la capa fija que trae el HTML y no se puede reescribir. CAT() ya combina ambas.
@@ -298,4 +390,6 @@ function inicializarBarras(){
 
 arranque();                      // se pinta al tiro con lo que haya guardado en este navegador
 inicializarBarras();             // y las barras extraibles quedan animando en los dos sentidos
+enlazarCalendario();             // los controles Mes/Año/Semestre y la navegación del calendario
+renderCalendario();              // pinta la vista de calendario activa (por defecto, el mes)
 conectarServidor();              // y si esto viene del servidor local, manda lo suyo al responder

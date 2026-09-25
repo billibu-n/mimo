@@ -7,7 +7,7 @@ function renderBarras(){
   const metas = semanas.map(w => metaDe(w.lunes));            // la de cada semana, que puede ser otra
   const hayPropias = semanas.some(w => tieneMetaPropia(w.lunes));
   const tope = Math.max(meta, Math.max.apply(null, metas.concat(totales).concat([0]))) * 1.12 || 10;
-  document.getElementById('grafico-leyenda').innerHTML =
+  document.getElementById('es-grafico-leyenda').innerHTML =
     ramosBase().map(r => {
       const h = semanas.reduce((a, w) => a + (Number(minutosDe(w.lunes)[r.codigo]) || 0), 0) / 60;
       return '<span class="lg"><i style="background:' + colorDe(r.codigo) + '"></i>' + esc(r.alias) +
@@ -20,13 +20,13 @@ function renderBarras(){
   const alto = 100;
   const hayAlgo = Math.max.apply(null, totales.concat([0])) > 0;
   if (!hayAlgo) {
-    document.getElementById('grafico').innerHTML = '<div class="grafico-vacio">' +
+    document.getElementById('es-grafico').innerHTML = '<div class="grafico-vacio">' +
       'Todavía no hay horas repartidas entre los ramos, así que no hay nada que dibujar. ' +
       'Lo registrado (' + fmtHM(sinRepartir() * 60) + ') está sin repartir: asígnalo en la tabla de ' +
       'aquí abajo y cada ramo aparece con su color.</div>';
     return;
   }
-  document.getElementById('grafico').innerHTML = '<div class="grafico-in">' + semanas.map(w => {
+  document.getElementById('es-grafico').innerHTML = '<div class="grafico-in">' + semanas.map(w => {
     const m = minutosDe(w.lunes), totalH = horasAsignadas(w.lunes);
     const seg = ramosBase().map(r => {
       const v = Number(m[r.codigo]) || 0;
@@ -73,7 +73,7 @@ function renderKpisEstudio(){
   const sobreMeta = sem.semanas.filter(w => horasSemana(w.lunes) > metaDe(w.lunes)).length;
   const conPropia = sem.semanas.filter(w => tieneMetaPropia(w.lunes)).length;
   const conRegistro = totales.filter(t => t > 0);
-  document.getElementById('estudio-kpis').innerHTML =
+  document.getElementById('es-kpis').innerHTML =
     kpi(fmtHM(totalHoras() * 60) || '0h', 'estudiadas en el semestre') +
     kpi((conRegistro.length ? fmtHM(conRegistro.reduce((a,b) => a+b, 0) / conRegistro.length * 60) : '0h'),
         'promedio en las ' + conRegistro.length + ' semanas con registro') +
@@ -85,7 +85,7 @@ function renderKpisEstudio(){
 // Avisa si a un ramo le estás dedicando poco tiempo (menos de la mitad de su meta semanal) y te deja
 // decidir: "es válido, déjalo así" (lo descarta por esta semana) o "le dedicaré tiempo" (te pide horas).
 function renderDedicacion(){
-  const cont = document.getElementById('dedicacion');
+  const cont = document.getElementById('es-dedicacion');
   if (!cont) return;
   const s = est();
   const lu = semanaDe(hoy());
@@ -149,9 +149,9 @@ function minutosDeCasilla(lunes, codigo){
   return Number(((est().minutos[lunes] || {})[codigo])) || 0;
 }
 function pintarTotalesDeLaFila(lunes){
-  const cel = document.querySelector('#tabla-minutos td[data-tot="' + lunes + '"]');
+  const cel = document.querySelector('#es-tabla td[data-tot="' + lunes + '"]');
   if (cel) cel.textContent = fmtHM(horasSemana(lunes) * 60);
-  const co = document.querySelector('#tabla-minutos td[data-otros="' + lunes + '"] .h-otros');
+  const co = document.querySelector('#es-tabla td[data-otros="' + lunes + '"] .h-otros');
   if (co) co.textContent = fmtHM(minutosDe(lunes).OTROS);
 }
 // Lo que de verdad se guarda: con "+" suma, sin "+" reemplaza (para poder corregir a mano).
@@ -254,15 +254,15 @@ function renderEstudio(){
   renderDedicacion();
   // La meta base se edita en esta misma pestana (se mudo desde Ajustes, que es para lo secundario).
   // No se pisa el valor mientras se esta escribiendo en ella.
-  const casillaMeta = document.getElementById('meta-semanal');
+  const casillaMeta = document.getElementById('es-meta');
   if (casillaMeta && document.activeElement !== casillaMeta) casillaMeta.value = s.metas.semanal;
-  const chkMax = document.getElementById('meta-maxima');
+  const chkMax = document.getElementById('es-meta-max');
   if (chkMax) {
     chkMax.checked = !!(E.usarMetaMaxima);
     chkMax.parentElement.parentElement.querySelector('.pista').textContent = E.usarMetaMaxima
       ? 'Tu récord actual es ' + fmtHM(totalSemanaMax()) + '. Meta base ahora: ' + fmtHM(metaBaseEfectiva() * 60) + '.'
       : 'En vez de fijar un número, la meta pasa a ser la semana en la que más estudiaste hasta ahora. Si un día superas ese récord, la meta sube sola.';
-    const info = document.getElementById('meta-maxima-info');
+    const info = document.getElementById('es-meta-max-info');
     if (info) info.textContent = E.usarMetaMaxima
       ? 'Activado: tu meta es tu máximo histórico (' + fmtHM(totalSemanaMax()) + '), y se actualiza solo.'
       : '';
@@ -302,8 +302,8 @@ function renderEstudio(){
       rangoSemana(w.lunes) + '</span></td>' + celdas + celdaMeta +
       '<td class="tot" data-tot="' + w.lunes + '">' + fmtHM(horasSemana(w.lunes) * 60) + '</td></tr>';
   }).join('');
-  document.getElementById('tabla-minutos').innerHTML = cab + '<tbody>' + filas + '</tbody>';
-  document.querySelectorAll('#tabla-minutos input').forEach(inp => {
+  document.getElementById('es-tabla').innerHTML = cab + '<tbody>' + filas + '</tbody>';
+  document.querySelectorAll('#es-tabla input').forEach(inp => {
     inp.oninput = () => {
       const lu = inp.dataset.lunes;
       // Con "+" delante, el tiempo se SUMA a lo que ya habia en esa casilla: es para cuando
@@ -311,7 +311,7 @@ function renderEstudio(){
       // total de cabeza. Mientras se escribe NO se guarda --cada tecla sumaria otra vez--, solo
       // se muestra como quedaria el total; se confirma con Enter o al salir de la casilla.
       if (esSuma(inp.value)) {
-        const cel = document.querySelector('#tabla-minutos td[data-tot="' + lu + '"]');
+        const cel = document.querySelector('#es-tabla td[data-tot="' + lu + '"]');
         if (cel) cel.textContent = fmtHM(horasSemana(lu) * 60 + minutosEscritos(inp.value));
         return;
       }
@@ -342,7 +342,7 @@ function renderEstudio(){
   });
   // La columna Meta: escribir una meta propia para esa semana, o dejarla vacia para volver a la
   // base. Enter confirma, como en las casillas de tiempo.
-  document.querySelectorAll('#tabla-minutos input[data-meta]').forEach(inp => {
+  document.querySelectorAll('#es-tabla input[data-meta]').forEach(inp => {
     const aplicar = () => {
       const lu = inp.dataset.meta, txt = inp.value.trim();
       const s2 = est();
@@ -367,7 +367,7 @@ function renderEstudio(){
 }
 function renderPuntos(){
   const sem = semActivo(), s = est();
-  const cont = document.getElementById('puntos');
+  const cont = document.getElementById('es-puntos');
   const ancho = Math.max(700, cont.clientWidth || 900);
   const alto = 250, izq = 42, der = 14, arriba = 16, abajo = 30;
   const semanas = sem.semanas;
@@ -379,32 +379,32 @@ function renderPuntos(){
   const marcas = [0, 0.25, 0.5, 0.75, 1].map(f => {
     const v = tope * f;
     return '<line x1="' + izq + '" x2="' + (ancho - der) + '" y1="' + y(v) + '" y2="' + y(v) +
-      '" stroke="#e2e8f0" stroke-width="1"></line>' +
-      '<text x="' + (izq - 6) + '" y="' + (y(v) + 3.5) + '" text-anchor="end" font-size="9" fill="#94a3b8">' +
+      '" stroke="var(--line)" stroke-width="1"></line>' +
+      '<text x="' + (izq - 6) + '" y="' + (y(v) + 3.5) + '" text-anchor="end" font-size="9" fill="var(--muted)">' +
       v.toFixed(0) + '</text>';
   }).join('');
   const linea = horas.map((v, i) => (i ? 'L' : 'M') + x(i) + ' ' + y(v)).join(' ');
-  const actual = '<path d="' + linea + '" fill="none" stroke="#0f172a" stroke-width="2" stroke-linejoin="round"></path>' +
+  const actual = '<path d="' + linea + '" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linejoin="round"></path>' +
     semanas.map((w, i) => {
       const act = (w.lunes <= hoy() && sumaDias(w.lunes, 6) >= hoy());
       return '<circle cx="' + x(i) + '" cy="' + y(horas[i]) + '" r="' + (act ? 5 : 3.5) + '" fill="' +
-        (act ? '#2563eb' : '#fff') + '" stroke="#0f172a" stroke-width="2"><title>' + esc(w.etiqueta) + ': ' +
+        (act ? 'var(--ac)' : 'var(--sup)') + '" stroke="var(--fg)" stroke-width="2"><title>' + esc(w.etiqueta) + ': ' +
         fmtHM(horas[i] * 60) + '</title></circle>';
     }).join('');
   const etiquetas = semanas.map((w, i) =>
     (i % 2 === 0 || semanas.length <= 12)
-      ? '<text x="' + x(i) + '" y="' + (alto - 10) + '" text-anchor="middle" font-size="9" fill="#94a3b8">' +
+      ? '<text x="' + x(i) + '" y="' + (alto - 10) + '" text-anchor="middle" font-size="9" fill="var(--muted)">' +
         esc(w.etiqueta) + '</text>'
       : '').join('');
   cont.innerHTML = '<div class="puntos"><svg viewBox="0 0 ' + ancho + ' ' + alto + '" width="100%" height="' + alto + '">' +
     marcas +
     '<line x1="' + izq + '" x2="' + (ancho - der) + '" y1="' + y(objetivo) + '" y2="' + y(objetivo) +
-      '" stroke="#16a34a" stroke-width="2"></line>' +
-    '<text x="' + (ancho - der) + '" y="' + (y(objetivo) - 6) + '" text-anchor="end" font-size="10" fill="#16a34a">' +
+      '" stroke="var(--ok)" stroke-width="2"></line>' +
+    '<text x="' + (ancho - der) + '" y="' + (y(objetivo) - 6) + '" text-anchor="end" font-size="10" fill="var(--ok)">' +
       'objetivo ' + fmtHM(objetivo * 60) + '</text>' +
     actual + etiquetas + '</svg></div>';
-  document.getElementById('puntos-leyenda').innerHTML =
-    '<span class="lg"><i style="background:#0f172a"></i>horas realizadas</span>' +
-    '<span class="lg"><i style="background:#16a34a"></i>objetivo semanal ' + fmtHM(objetivo * 60) + '</span>' +
-    '<span class="lg" style="color:var(--muted)">El punto azul es la semana en curso.</span>';
+  document.getElementById('es-puntos-leyenda').innerHTML =
+    '<span class="lg"><i style="background:var(--fg)"></i>horas realizadas</span>' +
+    '<span class="lg"><i style="background:var(--ok)"></i>objetivo semanal ' + fmtHM(objetivo * 60) + '</span>' +
+    '<span class="lg" style="color:var(--muted)">El punto resaltado es la semana en curso.</span>';
 }

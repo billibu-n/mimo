@@ -143,85 +143,105 @@ function renderAjustes(){
 }
 
 
-/* La seccion Ajustes > Malla: configurar los campos de la ficha del ramo.
-   Los campos viven en ficha().campos (cada uno con 'clave' fija y 'etiqueta' editable). Renombrar
-   cambia la etiqueta y NO pierde lo escrito, porque el valor se guarda por la CLAVE. */
-function renderConfigMalla(){
-  const caja = document.getElementById('aj-malla');
-  if (!caja) return;
-  const f = ficha();
-  const campos = f.campos;
+/* La configuracion de la malla quedo en dos tarjetas: colores de los ramos y secciones de la
+   carrera. La ficha del ramo se quito (2026-09-21): no aportaba a la malla y sus campos
+   configurables se iban a favor del detalle del ramo, que ya muestra descripcion y equivalente. */
 
-  const filas = campos.map((c, i) =>
-    '<div class="ficha-campo" data-campo="' + esc(c.clave) + '">' +
-      '<button class="btn chico" data-sube="' + i + '" title="Subir" ' + (i === 0 ? 'disabled' : '') + '>↑</button>' +
-      '<input type="text" class="etiqueta-campo" value="' + esc(c.etiqueta) + '">' +
-      '<button class="btn chico peligro" data-quita="' + esc(c.clave) + '" title="Quitar"' +
-        (campos.length <= 1 ? ' disabled' : '') + '>×</button>' +
-    '</div>').join('');
+
+
+/* Secciones de la carrera: agrupan semestres en categorias (Plan comun, Licenciatura,
+   Especialidad...). Vive en Configuracion de la malla. Usa las clases de la casa (.campo,
+   .fila, .btn) y los desplegables propios (.sel-propio via 07-select.js), nada suelto. */
+function renderSecciones(){
+  const caja = document.getElementById('secciones-malla');
+  if (!caja) return;
+  const secs = SECC();
+  const niveles = NIVELES().filter(n => n.nivel !== 99).map(n => Number(n.nivel)).sort((a,b)=>a-b);
+  const opNivel = niveles.map(n => '<option value="' + n + '">Semestre ' + n + '</option>').join('');
+
+  const filasSec = secs.length
+    ? secs.map((s, i) =>
+        '<div class="campo">' +
+          '<div class="fila" style="gap:8px;flex-wrap:nowrap">' +
+            '<span class="pt-seccion" style="background:' + esc(s.color) + '"></span>' +
+            '<input type="text" class="entrada sec-sigla" value="' + esc(s.sigla) + '" maxlength="3" title="Sigla (2-3 letras)" style="width:76px;min-width:76px;text-align:center;text-transform:uppercase">' +
+            '<input type="text" class="entrada sec-nombre" value="' + esc(s.nombre) + '" placeholder="Nombre" style="flex:1;min-width:120px">' +
+            '<span class="sec-rango" style="font-size:.74rem;color:var(--muted);white-space:nowrap">' + esc(secsRangoTxt(s)) + '</span>' +
+            '<button class="btn chico peligro sec-quitar" title="Quitar sección">×</button>' +
+          '</div>' +
+          '<input type="color" class="entrada sec-color" value="' + esc(s.color) + '" title="Color" style="width:100%">' +
+        '</div>').join('')
+    : '<p class="ayuda" style="margin:0">Todavía no hay secciones. Crea la primera abajo.</p>';
+
+  const asignador = secs.length
+    ? '<div class="fila" style="gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">' +
+        '<span style="font-size:.85rem">La sección</span>' +
+        '<select id="sec-asignar-idx" style="width:150px">' +
+          secs.map((s,i) => '<option value="' + i + '">' + esc(s.sigla + ' · ' + s.nombre) + '</option>').join('') +
+        '</select>' +
+        '<span style="font-size:.85rem">va del</span>' +
+        '<select id="sec-desde" style="width:120px">' + opNivel + '</select>' +
+        '<span style="font-size:.85rem">al</span>' +
+        '<select id="sec-hasta" style="width:120px">' + opNivel + '</select>' +
+        '<button class="btn acento" id="sec-asignar-rango">Aplicar</button>' +
+        '<button class="btn chico" id="sec-limpiar-todo" title="Quitar la sección de todos los ramos">Limpiar</button>' +
+      '</div>'
+    : '<p class="ayuda" style="margin:12px 0 0">Cuando haya secciones, acá eliges qué rango de semestres abarca cada una.</p>';
 
   caja.innerHTML =
-    '<div class="ficha-lista">' + filas + '</div>' +
-    '<div class="fila" style="gap:8px;margin-top:10px">' +
-      '<input type="text" id="aj-ficha-nuevo" placeholder="Nuevo campo (ej. Profesor)">' +
-      '<button class="btn acento" id="aj-ficha-agregar">Agregar campo</button>' +
+    filasSec +
+    '<div class="fila" style="gap:8px;margin-top:12px">' +
+      '<input type="text" id="sec-nueva-nombre" class="entrada" placeholder="Nombre (ej. Plan común)" style="flex:1">' +
+      '<input type="text" id="sec-nueva-sigla" class="entrada" placeholder="Sigla (ej. PC)" maxlength="3" style="width:76px;min-width:76px;text-transform:uppercase">' +
+      '<button class="btn acento" id="sec-nueva-agregar">Agregar sección</button>' +
     '</div>' +
-    '<div class="fila" style="gap:8px;margin-top:8px">' +
-      '<label class="campo" style="flex:1"><input type="checkbox" id="aj-ficha-visible"' +
-        (f.visible ? ' checked' : '') + ' style="justify-self:end"> Mostrar la ficha junto a la malla</label>' +
-      '<button class="btn" id="aj-ficha-fabrica">Volver a los de fábrica</button>' +
-    '</div>';
+    asignador;
 
-  caja.querySelectorAll('[data-campo]').forEach(fila => {
-    const clave = fila.dataset.campo;
-    const inp = fila.querySelector('.etiqueta-campo');
-    inp.onchange = () => {
-      const campo = campos.find(c => c.clave === clave);
-      if (!campo) return;
-      const txt = inp.value.trim();
-      campo.etiqueta = txt || campo.etiqueta;
-      if (!txt) inp.value = campo.etiqueta;
-      guardar('Campo de la ficha renombrado');
-      renderConfigMalla(); renderMalla();
+  // guardar cambios de sigla / nombre / color en vivo
+  caja.querySelectorAll('.campo').forEach((fila, i) => {
+    const s = secs[i];
+    fila.querySelector('.sec-nombre').onchange = ev => { s.nombre = ev.target.value.trim() || s.nombre; guardar('Sección renombrada'); renderSecciones(); renderMalla(); };
+    fila.querySelector('.sec-sigla').onchange = ev => { s.sigla = ev.target.value.trim().toUpperCase().slice(0,3); guardar('Sigla de la sección cambiada'); renderSecciones(); renderMalla(); };
+    fila.querySelector('.sec-color').onchange = ev => { s.color = ev.target.value; guardar('Color de la sección cambiado'); renderSecciones(); renderMalla(); };
+    fila.querySelector('.sec-quitar').onclick = () => {
+      Object.keys(CAT()).forEach(cod => { if (seccionDe(cod) === i) { CAT()[cod].seccion = null; delete CAT()[cod].seccion; } });
+      E.secciones.splice(i, 1);
+      guardar('Sección quitada'); renderSecciones(); renderMalla();
     };
   });
 
-  caja.querySelectorAll('[data-sube]').forEach(b => b.onclick = () => {
-    const i = Number(b.dataset.sube);
-    if (i <= 0 || i >= campos.length) return;
-    const tmp = campos[i - 1]; campos[i - 1] = campos[i]; campos[i] = tmp;
-    guardar('Orden de la ficha cambiado'); renderConfigMalla(); renderMalla();
-  });
-
-  caja.querySelectorAll('[data-quita]').forEach(b => b.onclick = () => {
-    if (campos.length <= 1) return;
-    f.campos = campos.filter(c => c.clave !== b.dataset.quita);
-    guardar('Campo de la ficha quitado'); renderConfigMalla(); renderMalla();
-  });
-
-  document.getElementById('aj-ficha-agregar').onclick = () => {
-    const txt = document.getElementById('aj-ficha-nuevo').value.trim();
-    if (!txt) { mostrarAviso('Escribe el nombre del campo primero'); return; }
-    const ocupadas = campos.map(c => c.clave);
-    const clave = claveDeEtiqueta(txt, ocupadas);
-    f.campos = campos.concat([{clave: clave, etiqueta: txt}]);
-    document.getElementById('aj-ficha-nuevo').value = '';
-    guardar('Campo "' + txt + '" agregado a la ficha');
-    renderConfigMalla(); renderMalla();
+  if (document.getElementById('sec-nueva-agregar')) document.getElementById('sec-nueva-agregar').onclick = () => {
+    const nombre = document.getElementById('sec-nueva-nombre').value.trim();
+    const sigla = document.getElementById('sec-nueva-sigla').value.trim().toUpperCase();
+    if (!nombre) { mostrarAviso('Escribe el nombre de la sección'); return; }
+    E.secciones.push({nombre: nombre, sigla: sigla || nombre.replace(/[aeiouáéíóú ]/gi,'').slice(0,2).toUpperCase(), color: '#2563eb'});
+    guardar('Sección "' + nombre + '" creada');
+    renderSecciones(); renderMalla();
   };
 
-  document.getElementById('aj-ficha-visible').onchange = ev => {
-    f.visible = ev.target.checked;
-    guardar(f.visible ? 'Ficha visible' : 'Ficha oculta');
-    renderMalla();
+  if (document.getElementById('sec-asignar-rango')) document.getElementById('sec-asignar-rango').onclick = () => {
+    const idx = Number(document.getElementById('sec-asignar-idx').value);
+    const desde = Number(document.getElementById('sec-desde').value);
+    const hasta = Number(document.getElementById('sec-hasta').value);
+    if (desde > hasta) { mostrarAviso('El semestre de inicio no puede ser mayor que el final'); return; }
+    asignarSeccionPorNiveles(idx, desde, hasta);
+    renderSecciones(); renderMalla();
   };
 
-  document.getElementById('aj-ficha-fabrica').onclick = () => {
-    f.campos = FICHA_FABRICA.map(c => ({clave: c.clave, etiqueta: c.etiqueta}));
-    guardar('Ficha vuelta a los campos de fábrica'); renderConfigMalla(); renderMalla();
+  if (document.getElementById('sec-limpiar-todo')) document.getElementById('sec-limpiar-todo').onclick = () => {
+    Object.keys(CAT()).forEach(cod => { const c = CAT()[cod]; if (c.seccion !== undefined) delete c.seccion; });
+    guardar('Secciones limpiadas de los ramos'); renderSecciones(); renderMalla();
   };
 }
 
+/* Texto corto del rango de una seccion para mostrarlo en su fila. */
+function secsRangoTxt(s){
+  const ns = s.niveles || [];
+  if (!ns.length) return 'sin rango';
+  const ordenados = ns.slice().sort((a,b)=>a-b);
+  if (ordenados.length === 1) return 'semestre ' + ordenados[0];
+  return 'semestres ' + ordenados[0] + '–' + ordenados[ordenados.length-1];
+}
 
 /* Colores de los ramos (vive en la pestana Malla). Antes estaba en Ajustes; se mudo junto con
    la ficha porque ambos son configuracion de la malla, no del panel. */

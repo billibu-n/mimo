@@ -1,3 +1,24 @@
+/* Vinculo OPCIONAL entre un evento y su ramo: si el evento tiene ramo, el usuario decide si su
+   nota viaja al promedio del ramo. Antes esa conexion solo se podia crear con el boton "Pasar al
+   promedio" del bloque de nota; aca se ve el estado y se puede activar o quitar al vuelo. */
+function catAutoPorTipo(tipo){ return CAT_POR_TIPO[tipo] || 'General'; }
+function vinculoRamoHtml(ev, id){
+  if (!ev.ramo) return '';
+  const comp = componenteDelEvento(ev);
+  const cats = catsDe(ev.ramo);
+  const cat = comp ? comp.categoria : catAutoPorTipo(ev.tipo);
+  const opciones = (cats.some(c => c.nombre === cat) ? cats : cats.concat([{nombre: cat}])).map(c =>
+    '<option' + (c.nombre === cat ? ' selected' : '') + '>' + esc(c.nombre) + '</option>').join('');
+  return '<div class="campo m-vinculo"><span>Nota del ramo<small class="ayuda" style="display:block">suma al promedio</small></span>' +
+    '<select id="m-vinc-cat">' + opciones + '</select></div>' +
+    (comp
+      ? '<div class="fila" style="gap:8px;align-items:center;margin:2px 0 8px"><span class="ayuda" style="flex:1">' +
+        'Su nota suma al promedio de ' + esc(aliasDe(ev.ramo)) + ' (categoria ' + esc(cat) + ').</span>' +
+        '<button class="btn chico" id="m-vinc-quitar">Quitar del ramo</button></div>'
+      : '<div class="fila" style="gap:8px;align-items:center;margin:2px 0 8px"><span class="ayuda" style="flex:1">' +
+        'Todavia no suma al promedio del ramo.</span>' +
+        '<button class="btn chico" id="m-vinc-usar">Usar el ramo</button></div>');
+}
 /* ---------------------------------------------------------------- editor de tarea */
 let editando = null;
 function abrirEditor(id){
@@ -30,7 +51,11 @@ function abrirEditor(id){
     : '<p class="ayuda">Elige un ramo arriba y aqui aparece la nota, para pasarla al promedio.</p>';
   document.getElementById('modal-caja').innerHTML = `
     <button class="cerrar" id="cerrar">Cerrar</button>
-    <h2>${esc(ev.texto)}</h2>
+    <div class="campo m-nombre-caja">
+      <span>Nombre</span>
+      <input type="text" id="m-nombre" value="${esc(ev.texto)}" placeholder="Ej: Control 1 de Álgebra">
+    </div>
+    ${vinculoRamoHtml(ev, id)}
     <div class="sub">${esc(ev.dia)} ${esc(ev.fecha)} · ${esc(tiposDe()[ev.tipo] || ev.tipo)}${
       ev.ramo ? ' · ' + esc((cursoDe(ev.ramo) || {}).alias || ev.ramo) : ''}</div>
     <details class="barra-extraible" open>
@@ -88,6 +113,39 @@ function abrirEditor(id){
     </div>`;
   document.getElementById('modal').classList.add('on');
   document.getElementById('cerrar').onclick = cerrarEditor;
+  // El nombre es el dato que enlaza el calendario con Notas (componente.nombre === evento.texto).
+  // Al cambiarlo, el evento sigue viviendo en `nuevas` (ahi esta su identidad: id, tipo, ramo) y,
+  // si en su ramo ya existe un componente con el nuevo nombre, hereda su fecha en vez de duplicar.
+  const inpNombre = document.getElementById('m-nombre');
+  if (inpNombre) inpNombre.onchange = e2 => {
+    const nuevo = e2.target.value.trim();
+    if (!nuevo || nuevo === ev.texto) { e2.target.value = ev.texto; return; }
+    const viejo = ev.texto;
+    ev.texto = nuevo;
+    if (ev.ramo) {
+      const c = compsDe(ev.ramo).filter(x => x.nombre === viejo)[0];
+      if (c) c.nombre = nuevo;
+      else sincronizarEventoAComponente(ev);
+    }
+    guardar('Nombre cambiado'); renderSemestre(); pintarFiltros(); abrirEditor(id);
+  };
+  const bVincUsar = document.getElementById('m-vinc-usar');
+  if (bVincUsar) bVincUsar.onclick = () => {
+    if (!ev.texto) { const av = document.getElementById('m-vinc-cat'); if (av) av.focus(); return; }
+    const cat = document.getElementById('m-vinc-cat').value;
+    if (!catsDe(ev.ramo).some(c => c.nombre === cat)) {
+      catsDe(ev.ramo).push({nombre: cat, peso: 1.0, color: colorLibre()});
+    }
+    compsDe(ev.ramo).push({nombre: ev.texto, categoria: cat, peso: 1, nota: null, fecha: ev.fecha || null});
+    guardar('Vinculado al promedio de ' + aliasDe(ev.ramo)); renderTodo(); abrirEditor(id);
+  };
+  const bVincQuitar = document.getElementById('m-vinc-quitar');
+  if (bVincQuitar) bVincQuitar.onclick = () => {
+    const arr = compsDe(ev.ramo);
+    const j = arr.findIndex(x => x.nombre === ev.texto);
+    if (j >= 0) arr.splice(j, 1);
+    guardar('Quitado del promedio de ' + aliasDe(ev.ramo)); renderTodo(); abrirEditor(id);
+  };
   document.querySelectorAll('.prioridades button').forEach(b => b.onclick = () => {
     const p = b.dataset.p;
     if (p) s.prioridades[id] = p; else delete s.prioridades[id];
@@ -100,7 +158,9 @@ function abrirEditor(id){
     renderSemestre();
   };
   document.getElementById('m-fecha').onchange = e2 => {
-    ev.fecha = e2.target.value; guardar(); renderSemestre();
+    ev.fecha = e2.target.value; ev.dia = diaDeFecha(e2.target.value);
+    sincronizarEventoAComponente(ev);   // calendario -> evaluaciones (mismo nombre + ramo)
+    guardar(); renderSemestre();
   };
   document.getElementById('m-hora').onchange = e2 => {
     ev.hora = e2.target.value || null; guardar(); renderSemestre();
@@ -111,7 +171,9 @@ function abrirEditor(id){
   };
   // Cambiar ramo o tipo rehace el modal: el bloque de la nota depende de ambos.
   document.getElementById('m-ramo').onchange = e2 => {
-    ev.ramo = e2.target.value || null; guardar(); renderSemestre(); abrirEditor(id);
+    ev.ramo = e2.target.value || null;
+    sincronizarEventoAComponente(ev);   // si el evento coincide con una evaluacion, se unen
+    guardar(); renderSemestre(); abrirEditor(id);
   };
   document.getElementById('m-tipo').onchange = e2 => {
     ev.tipo = e2.target.value; guardar(); renderSemestre(); abrirEditor(id);
@@ -127,7 +189,7 @@ function abrirEditor(id){
       .replace(/[^a-z0-9]+/g, '').slice(0, 16) + Object.keys(tiposDe()).length);
     if (!existente) { E.tipos = E.tipos || {}; E.tipos[cod] = limpio; }
     ev.tipo = cod;
-    guardar('Tipo "' + limpio + '" listo'); renderSemestre(); pintarFiltros(); abrirEditor(id);
+    guardar('Tipo "' + limpio + '" listo'); renderSemestre(); resetFiltros(); pintarFiltros(); abrirEditor(id);
   };
   const inpNota = document.getElementById('m-nota');
   if (inpNota) inpNota.onchange = () => {
@@ -162,15 +224,39 @@ function abrirEditor(id){
   const b = document.getElementById('borrar');
   if (b) b.onclick = () => {
     est().nuevas = est().nuevas.filter(x => String(x.id) !== String(id));
-    guardar('Tarea eliminada'); cerrarEditor(); renderSemestre();
+    // renderSemestre() no repinta Tareas: la tarjeta se quedaba en pantalla hasta navegar.
+    guardar('Tarea eliminada'); cerrarEditor(); renderSemestre(); renderTareas();
   };
 }
-function cerrarEditor(){ document.getElementById('modal').classList.remove('on'); editando = null;
-  const caja = document.getElementById('modal-caja'); if (caja) caja.className = 'modal-caja'; }
+function cerrarEditor(){
+  // Un evento nuevo que se abre sin nombre y sin descripcion se descarta al cerrar: el evento ya no
+  // nace con texto fijo, asi que sin esto quedaria una tarjeta vacia en el calendario y en Tareas.
+  const idC = editando;
+  if (idC && String(idC).startsWith('n')) {
+    const evC = eventoPorId(idC);
+    const fC = (est().fichas || {})[idC] || {};
+    if (evC && !evC.texto && !fC.descripcion) {
+      est().nuevas = (est().nuevas || []).filter(x => String(x.id) !== String(idC));
+      guardar(); renderSemestre();
+    }
+  }
+  document.getElementById('modal').classList.remove('on'); editando = null;
+  const caja = document.getElementById('modal-caja'); if (caja) caja.className = 'modal-caja';
+}
 function nuevaTarea(){
-  if (!exigirSemestre('Los eventos van dentro de un semestre: ahi tienen su calendario.')) return;
+  // Los eventos ahora pueden ser personales (sin semestre): est() cae en E.personal cuando no hay
+  // semestre activo, asi que un evento nuevo se guarda igual y no se pierde.
   const id = 'n' + Date.now();
-  est().nuevas.push({id:id, semana:'—', dia:'Lunes', fecha:hoy(), texto:'Tarea nueva',
+  est().nuevas = est().nuevas || [];
+  est().nuevas.push({id:id, semana:'—', dia:diaDeFecha(hoy()), fecha:hoy(), texto:'',
                      detalle:'', ramo:null, color_excel:null, tipo:'tarea'});
+  // El tipo 'tarea' tiene que quedar visible de inmediato: en la version limpia el catalogo de
+  // tipos arranca vacio, y sin registrarlo el evento nuevo no se dibuja (ni en la tabla ni en el
+  // calendario), como lo vigila prueba_filtro_tipo. Se asegura y se recargan los filtros.
+  E.tipos = E.tipos || {};
+  if (!E.tipos['tarea']) E.tipos['tarea'] = TIPOS['tarea'] || 'TAREA';
+  resetFiltros(); pintarFiltros();
   guardar(); renderSemestre(); abrirEditor(id);
+  const inp = document.getElementById('m-nombre');
+  if (inp) { inp.focus(); inp.select(); }
 }
