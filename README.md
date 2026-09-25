@@ -7,8 +7,15 @@
 [**⬇ Descargar Mimo 1.0.4 (.zip)**](https://github.com/billibu-n/mimo/releases/download/v1.0.4/mimo-v1.0.4.zip)
 · [Ver todas las versiones](https://github.com/billibu-n/mimo/releases)
 
-App web estática (HTML + CSS + JS) para armar tu semestre: malla curricular, notas, calendario y
-hábitos de estudio. **No necesita servidor ni instalación**: se abre con doble clic en `index.html`.
+## Nota Importante
+
+Este proyecto está en pleno proceso de construcción, a futuro se implementarán nuevas herramientas y funcionalidades. La idea es que pueda cubrir todas las demandas que involucra ser estudiante en el proceso universitario, y que sea una herramienta para poder adjuntar y optimizar la organización.
+
+Por lo mismo, muchas herramientas aún pueden estar algo torpes e incompletas, y se pueden observar sutilidades visuales incómodas y poco prácticas.
+
+## Funcionamiento
+
+App web estática (HTML + CSS + JS) para armar tu semestre: malla curricular, notas, calendario, pomodoro, "to-do", etc. **No necesita servidor ni instalación**: se abre con doble clic en `index.html`.
 
 Pensada para **cualquier carrera y universidad**: la app se entrega vacía y cada alumno la llena con
 su propia malla (a mano o leyendo un PDF), sus ramos, su calendario y sus notas. Todo queda guardado
@@ -17,11 +24,8 @@ en el navegador de cada uno.
 ## Cómo se usa
 
 1. Descarga el `.zip` con el botón de arriba (o desde **Releases**).
-2. Descomprime la carpeta donde quieras (por ejemplo `C:\mimo`). No la muevas después.
-3. Abre `index.html` con doble clic.
-
-Tu información queda guardada en este navegador. Para llevarla a otro equipo usa
-**Ajustes → Mis datos → Descargar mis datos**.
+2. Descomprime la carpeta donde quieras (por ejemplo `C:\mimo`). No la muevas después, esto porque utiliza el caché del navegador. Por lo mismo, es importante ir haciendo respaldos constantemente con la opción que se encuentra en el apartado de **Ajustes**, se genera un respaldo/archivo de naturaleza .json que puede ser reutilizado en cualquier dispositivo incluso.
+4. Aunque por hora, sólo se abre `index.html` con doble clic para que funcione.
 
 ## Qué trae
 
