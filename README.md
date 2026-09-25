@@ -1,5 +1,12 @@
 # Mimo — Panel de semestre universitario
 
+<!-- build: 2026-09-25 v1.0.4 -->
+![Versión](https://img.shields.io/badge/versión-1.0.4-16a34a)
+![Plataforma](https://img.shields.io/badge/web-estática-2563eb)
+
+[**⬇ Descargar Mimo 1.0.4 (.zip)**](https://github.com/billibu-n/mimo/releases/download/v1.0.4/mimo-v1.0.4.zip)
+· [Ver todas las versiones](https://github.com/billibu-n/mimo/releases)
+
 App web estática (HTML + CSS + JS) para armar tu semestre: malla curricular, notas, calendario y
 hábitos de estudio. **No necesita servidor ni instalación**: se abre con doble clic en `index.html`.
 
@@ -9,7 +16,7 @@ en el navegador de cada uno.
 
 ## Cómo se usa
 
-1. Descarga el `.zip` desde **Releases** (o desde el botón verde *Code → Download ZIP*).
+1. Descarga el `.zip` con el botón de arriba (o desde **Releases**).
 2. Descomprime la carpeta donde quieras (por ejemplo `C:\mimo`). No la muevas después.
 3. Abre `index.html` con doble clic.
 
