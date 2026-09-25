@@ -9,6 +9,8 @@
 
 ## Nota Importante
 
+Importante mencionar que este proyecto ha podido ser construido con ayuda de herramienta de IA dada su robustez y mi poca experiencia en aplicaciones y diseño de páginas web. Por lo que también me ha sido de ayuda para adentrarme en la práctica de este tipo de actividades, pues por lo general ha sido sólo estudio y teoría, sin una utilidad directa del conocimiento.
+
 Este proyecto está en pleno proceso de construcción, a futuro se implementarán nuevas herramientas y funcionalidades. La idea es que pueda cubrir todas las demandas que involucra ser estudiante en el proceso universitario, y que sea una herramienta para poder adjuntar y optimizar la organización.
 
 Por lo mismo, muchas herramientas aún pueden estar algo torpes e incompletas, y se pueden observar sutilidades visuales incómodas y poco prácticas.
